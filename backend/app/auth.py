@@ -9,7 +9,7 @@ from threading import Lock
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import Field, StringConstraints
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -206,11 +206,11 @@ def start_session(account, request, response, db):
 
 
 @router.post("/email-code", status_code=202)
-def request_code(body: EmailRequest, request: Request, background: BackgroundTasks, db: Session = Depends(get_identity_db)):
+def request_code(body: EmailRequest, request: Request, db: Session = Depends(get_identity_db)):
     if body.purpose == "register" and not signup_enabled():
         raise DomainError(403, "auth.signup_disabled")
     attempt(request, "email-code")
-    email_codes.issue(db, background, body.email, body.purpose, request_locale(request))
+    email_codes.issue(db, body.email, body.purpose, request_locale(request))
     return {"accepted": True}
 
 

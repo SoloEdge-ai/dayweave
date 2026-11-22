@@ -14,7 +14,8 @@ export function Login({ done, signupEnabled }: { done: (status: Access) => void;
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState<'code' | 'reset' | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [operation, setOperation] = useState<'sending' | 'submitting' | null>(null)
+  const busy = operation !== null
   const [remaining, setRemaining] = useState(0)
   const [cooldowns, setCooldowns] = useState<Record<string, number>>({})
   const emailField = useRef<HTMLInputElement>(null)
@@ -39,7 +40,7 @@ export function Login({ done, signupEnabled }: { done: (status: Access) => void;
 
   async function sendCode() {
     if (!emailField.current?.reportValidity()) return
-    setBusy(true)
+    setOperation('sending')
     setError('')
     setNotice(null)
     try {
@@ -48,12 +49,12 @@ export function Login({ done, signupEnabled }: { done: (status: Access) => void;
       setNotice('code')
       codeField.current?.focus()
     } catch (e) { setError(errorText(e)) }
-    finally { setBusy(false) }
+    finally { setOperation(null) }
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    setBusy(true)
+    setOperation('submitting')
     setError('')
     try {
       if (mode === 'reset') {
@@ -72,7 +73,7 @@ export function Login({ done, signupEnabled }: { done: (status: Access) => void;
       }
       done(status)
     } catch (e) { setError(errorText(e)) }
-    finally { setBusy(false) }
+    finally { setOperation(null) }
   }
 
   return <div className="access-screen">
@@ -106,7 +107,7 @@ export function Login({ done, signupEnabled }: { done: (status: Access) => void;
               pattern="[0-9]{8}" maxLength={8} value={code} onChange={e => setCode(e.target.value)} />
           </label>
             <button type="button" className="secondary" disabled={busy || remaining > 0} onClick={sendCode}>
-              {remaining ? '重新发送' + ' (' + remaining + 's)' : '发送验证码'}
+              {operation === 'sending' ? '正在发送…' : remaining ? '重新发送' + ' (' + remaining + 's)' : '发送验证码'}
             </button>
           </div>
         </>}

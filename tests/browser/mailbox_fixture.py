@@ -17,6 +17,7 @@ def mailbox(directory):
 
     class Receiver:
         first_greeting = True
+        reject_first_signup = True
 
         async def handle_EHLO(self, server, session, envelope, hostname, responses):
             # Verify that a signup still receives one usable code after a dropped greeting.
@@ -28,6 +29,9 @@ def mailbox(directory):
 
         async def handle_DATA(self, server, session, envelope):
             message = BytesParser(policy=policy.default).parsebytes(envelope.content)
+            if self.reject_first_signup and message["To"] == "second-user@example.org":
+                self.reject_first_signup = False
+                return "451 Temporary delivery failure"
             with path.open("a", encoding="utf-8") as output:
                 print(json.dumps({"to": message["To"], "body": message.get_body().get_content()}), file=output)
             return "250 OK"

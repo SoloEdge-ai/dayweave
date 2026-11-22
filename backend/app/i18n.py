@@ -26,6 +26,8 @@ MESSAGES = {
     "auth.email_invalid": ("请输入有效的邮箱地址。", "Enter a valid email address.", "有効なメールアドレスを入力してください。"),
     "auth.email_taken": ("该邮箱已绑定账号。", "This email already belongs to an account.", "このメールアドレスは登録済みです。"),
     "auth.invalid_code": ("验证码错误或已过期，请检查验证码或重新获取。", "The code is incorrect or expired. Check it or request a new one.", "コードが違うか、有効期限が切れています。確認するか再発行してください。"),
+    "auth.mail_delivery_failed": ("验证码邮件未能确认发送，请重试。", "Email submission could not be confirmed. Please try again.", "確認メールの送信を確認できませんでした。もう一度お試しください。"),
+    "auth.mail_pending": ("验证码正在发送，请稍后再试。", "An email request is in progress. Please try again shortly.", "確認メールを送信中です。しばらくしてからお試しください。"),
     "auth.mail_unavailable": ("发信服务尚未配置，请联系服务器管理员。", "Email delivery is not configured. Contact the server operator.", "メール送信が設定されていません。サーバー管理者に連絡してください。"),
     "mail.register": ("DayWeave 注册验证码", "Verify your email for DayWeave", "DayWeave の登録用確認コード"),
     "mail.reset": ("DayWeave 密码重置验证码", "Reset your DayWeave password", "DayWeave のパスワード再設定コード"),

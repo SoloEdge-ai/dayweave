@@ -444,5 +444,6 @@
   "本账号已连接 Codex": "Codex is connected to your account",
   "在新标签页打开 OpenAI，输入此设备码授权。": "Open OpenAI in a new tab and enter this device code to authorize.",
   "正在等待授权": "Waiting for authorization",
-  "确认断开 Codex？": "Disconnect Codex from this account?"
+  "确认断开 Codex？": "Disconnect Codex from this account?",
+  "正在发送…": "Sending…"
 }

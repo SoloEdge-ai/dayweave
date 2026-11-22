@@ -20,7 +20,8 @@ def http(tmp_path, monkeypatch):
     monkeypatch.setenv("DAYWEAVE_SMTP_SECURITY", "starttls")
     monkeypatch.setattr(auth, "_attempts", {})
     def capture(server, recipient, purpose, code, language):
-        (tmp_path / (recipient + "." + purpose)).write_text(code)
+        if code is not None:
+            (tmp_path / (recipient + "." + purpose)).write_text(code)
     monkeypatch.setattr(MailServer, "send", capture)
     engine = create_engine(db.sqlite_url(), connect_args={"check_same_thread": False})
     event.listen(engine, "connect", db.configure_sqlite)
@@ -277,6 +278,13 @@ def test_email_ownership_and_password_recovery(http, monkeypatch):
     credentials = {"email": email.upper(), "username": "owner", "password": PASSWORD}
     assert client.post("/api/auth/register", json=credentials).status_code == 422
     request = {"email": email, "purpose": "register"}
+    with monkeypatch.context() as outage:
+        def unavailable(*args):
+            raise ConnectionResetError()
+        outage.setattr(email_codes.MailServer, "send", unavailable)
+        for address in (email, "admin@example.org"):
+            failed = client.post("/api/auth/email-code", json={**request, "email": address})
+            assert failed.status_code == 503 and failed.json()["code"] == "auth.mail_delivery_failed"
     assert client.post("/api/auth/email-code", json=request).json() == {"accepted": True}
     register_code = (root / (email + ".register")).read_text()
     assert client.post("/api/auth/email-code", json=request).status_code == 202

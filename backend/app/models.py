@@ -150,4 +150,5 @@ class EmailChallenge(Base):
     purpose: Mapped[str] = mapped_column(String(16), primary_key=True)
     digest: Mapped[str] = mapped_column(String(64))
     issued_at: Mapped[int] = mapped_column(Integer, index=True)
+    delivery_state: Mapped[str] = mapped_column(String(16), default="submitted", server_default="submitted")
     attempts: Mapped[int] = mapped_column(Integer)

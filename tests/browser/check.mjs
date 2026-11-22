@@ -200,6 +200,8 @@ async function checkAccountIsolation(page, app, firstTasks) {
   const email = 'second-user@example.org'
   await page.getByLabel('邮箱', { exact: true }).fill(email)
   await page.getByRole('button', { name: '发送验证码' }).click()
+  await page.getByText('验证码邮件未能确认发送，请重试。', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '发送验证码', exact: true }).click()
   await page.getByLabel('邮箱验证码').fill(await app.receivedCodes(email, 1))
   await page.locator('input[type=password]').fill('separate-fixture-password')
   await page.getByRole('button', { name: '注册并登录' }).click()

@@ -31,7 +31,7 @@ sequenceDiagram
 | --- | --- |
 | `GET /api/health` | 验证服务能否查询已迁移的数据库 |
 | `GET /api/auth/status` | 读取 `authenticated`、`signup_enabled` 及已登录账号的ID、用户名和绑定邮箱 |
-| `POST /api/auth/email-code` | 提交 `email` 及用途 `purpose`（`register` 或 `reset`）。接口接受请求后返回 202，对已注册和未知邮箱使用相同响应。 |
+| `POST /api/auth/email-code` | 提交邮箱和用途（register 或 reset）。发信请求等待邮件服务响应。受理后返回 202，已存在与未知邮箱的受理响应相同。邮件服务故障时返回 503，可立即重试；同一请求仍在发送时返回 409。 |
 | `POST /api/auth/register` | 提交 `username`、`email`、至少十个字符的 `password` 和八位数字字符串 `code`，成功后创建账号、个人工作区与会话。 |
 | `POST /api/auth/reset-password` | 提交 `email`、找回密码用的 `code` 以及新 `password`，成功返回 204 并撤销该账号的所有会话。 |
 | `POST /api/auth/login`、`POST /api/auth/logout` | 在 `username` 字段填写用户名或邮箱，凭密码登录；注销时结束当前会话。 |

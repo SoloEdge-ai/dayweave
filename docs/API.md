@@ -31,7 +31,7 @@ sequenceDiagram
 | --- | --- |
 | `GET /api/health` | Verify that the service can query the migrated database |
 | `GET /api/auth/status` | Read `authenticated`, `signup_enabled` and the signed-in account's ID, username and verified email |
-| `POST /api/auth/email-code` | Send `email` and `purpose` (`register` or `reset`). An accepted request returns 202 with the same body for existing and unknown addresses. |
+| `POST /api/auth/email-code` | Send `email` and `purpose` (`register` or `reset`). The endpoint waits for the relay before returning 202. Existing and unknown addresses receive the same acceptance body. A relay failure returns 503 and permits an immediate retry. An overlapping request still awaiting submission returns 409. |
 | `POST /api/auth/register` | Send `username`, `email`, `password` (10 or more characters), and the emailed `code` as an eight-digit string. Creates the account, personal workspace and session. |
 | `POST /api/auth/reset-password` | Send `email`, the reset `code` and a new `password`. Success returns 204 and revokes all sessions for that account. |
 | `POST /api/auth/login`, `POST /api/auth/logout` | Sign in by passing a username or email in `username` with the password, or invalidate the current session. |

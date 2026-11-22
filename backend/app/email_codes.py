@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 from email_validator import EmailNotValidError, validate_email
 from pydantic import AfterValidator, StringConstraints
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from .db import data_dir
 from .i18n import DomainError, translate
@@ -79,13 +79,6 @@ class MailServer:
             raise
 
     def send(self, recipient, purpose, code, language):
-        message = EmailMessage()
-        message["Date"] = formatdate(localtime=False, usegmt=True)
-        message["Message-ID"] = make_msgid(domain=self.sender.rsplit("@", 1)[1])
-        message["From"] = self.sender
-        message["To"] = recipient
-        message["Subject"] = translate("mail." + purpose, language)
-        message.set_content(translate("mail.body", language, verification=code))
         context = ssl.create_default_context()
         for attempt in range(3):
             try:
@@ -97,7 +90,15 @@ class MailServer:
                 time.sleep(attempt + 1)
         try:
             # A lost acknowledgment after DATA is ambiguous. Submit each message only once.
-            smtp.send_message(message)
+            if code is not None:
+                message = EmailMessage()
+                message["Date"] = formatdate(localtime=False, usegmt=True)
+                message["Message-ID"] = make_msgid(domain=self.sender.rsplit("@", 1)[1])
+                message["From"] = self.sender
+                message["To"] = recipient
+                message["Subject"] = translate("mail." + purpose, language)
+                message.set_content(translate("mail.body", language, verification=code))
+                smtp.send_message(message)
             try:
                 smtp.quit()
             except OSError:
@@ -111,33 +112,41 @@ def fingerprint(email, purpose, code):
     return hmac.new(key, f"{email}\0{purpose}\0{code}".encode(), hashlib.sha256).hexdigest()
 
 
-def deliver(server, email, purpose, code, language):
-    try:
-        server.send(email, purpose, code, language)
-    except OSError as exc:
-        # Relay replies can include private message data. Log only the type and numeric status.
-        logging.getLogger(__name__).error("Verification email delivery failed (%s, SMTP %s).",
-                                          type(exc).__name__, getattr(exc, "smtp_code", "unavailable"))
-
-
-def issue(db, background, email, purpose, language):
+def issue(db, email, purpose, language):
     server = MailServer.configured()
     lock_for_write(db)
     now = int(time.time())
     db.execute(delete(EmailChallenge).where(EmailChallenge.issued_at <= now - TTL))
     challenge = db.get(EmailChallenge, (email, purpose))
-    if challenge and now - challenge.issued_at < RESEND_SECONDS:
+    if challenge and challenge.delivery_state == "pending" and now - challenge.issued_at < 120:
+        raise DomainError(409, "auth.mail_pending")
+    if challenge and challenge.delivery_state == "submitted" and now - challenge.issued_at < RESEND_SECONDS:
         return
+
     code = f"{secrets.randbelow(100_000_000):08d}"
     digest = fingerprint(email, purpose, code)
     if not challenge:
         challenge = EmailChallenge(email=email, purpose=purpose)
         db.add(challenge)
     challenge.digest, challenge.issued_at, challenge.attempts = digest, now, 0
+    challenge.delivery_state = "pending"
     exists = db.scalar(select(Account.id).where(Account.email == email)) is not None
+    db.commit()  # Release the identity database before waiting on the relay.
+
+    finish = update(EmailChallenge).where(
+        EmailChallenge.email == email, EmailChallenge.purpose == purpose, EmailChallenge.digest == digest,
+    )
+    try:
+        # Check transport and authentication even for an ineligible address.
+        server.send(email, purpose, code if exists == (purpose == "reset") else None, language)
+    except OSError as exc:
+        logging.getLogger(__name__).error("Verification email delivery failed (%s, SMTP %s).",
+                                          type(exc).__name__, getattr(exc, "smtp_code", "unavailable"))
+        db.execute(finish.values(delivery_state="failed"))
+        db.commit()
+        raise DomainError(503, "auth.mail_delivery_failed") from None
+    db.execute(finish.values(delivery_state="submitted"))
     db.commit()
-    if exists == (purpose == "reset"):
-        background.add_task(deliver, server, email, purpose, code, language)
 
 
 def consume(db, email, purpose, code):
