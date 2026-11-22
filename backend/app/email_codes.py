@@ -62,6 +62,22 @@ class MailServer:
             raise DomainError(503, "auth.mail_unavailable")
         return cls(host, port, sender, mode)
 
+    def connect(self, context):
+        if self.mode == "tls":
+            smtp = smtplib.SMTP_SSL(self.host, self.port, timeout=10, context=context)
+        else:
+            smtp = smtplib.SMTP(self.host, self.port, timeout=10)
+        try:
+            if self.mode == "starttls":
+                smtp.starttls(context=context)
+            smtp.ehlo_or_helo_if_needed()
+            if user := os.getenv("DAYWEAVE_SMTP_USER"):
+                smtp.login(user, os.environ["DAYWEAVE_SMTP_PASSWORD"])
+            return smtp
+        except Exception:
+            smtp.close()
+            raise
+
     def send(self, recipient, purpose, code, language):
         message = EmailMessage()
         message["Date"] = formatdate(localtime=False, usegmt=True)
@@ -71,16 +87,23 @@ class MailServer:
         message["Subject"] = translate("mail." + purpose, language)
         message.set_content(translate("mail.body", language, verification=code))
         context = ssl.create_default_context()
-        if self.mode == "tls":
-            connection = smtplib.SMTP_SSL(self.host, self.port, timeout=10, context=context)
-        else:
-            connection = smtplib.SMTP(self.host, self.port, timeout=10)
-        with connection as smtp:
-            if self.mode == "starttls":
-                smtp.starttls(context=context)
-            if user := os.getenv("DAYWEAVE_SMTP_USER"):
-                smtp.login(user, os.environ["DAYWEAVE_SMTP_PASSWORD"])
+        for attempt in range(3):
+            try:
+                smtp = self.connect(context)
+                break
+            except (ConnectionError, TimeoutError, ssl.SSLEOFError, smtplib.SMTPServerDisconnected):
+                if attempt == 2:
+                    raise
+                time.sleep(attempt + 1)
+        try:
+            # A lost acknowledgment after DATA is ambiguous. Submit each message only once.
             smtp.send_message(message)
+            try:
+                smtp.quit()
+            except OSError:
+                pass  # The relay already acknowledged the message.
+        finally:
+            smtp.close()
 
 
 def fingerprint(email, purpose, code):
@@ -91,8 +114,10 @@ def fingerprint(email, purpose, code):
 def deliver(server, email, purpose, code, language):
     try:
         server.send(email, purpose, code, language)
-    except (OSError, smtplib.SMTPException):
-        logging.getLogger(__name__).error("Verification email delivery failed. Check SMTP configuration and connectivity.")
+    except OSError as exc:
+        # Relay replies can include private message data. Log only the type and numeric status.
+        logging.getLogger(__name__).error("Verification email delivery failed (%s, SMTP %s).",
+                                          type(exc).__name__, getattr(exc, "smtp_code", "unavailable"))
 
 
 def issue(db, background, email, purpose, language):

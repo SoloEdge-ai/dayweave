@@ -16,6 +16,16 @@ def mailbox(directory):
     path.touch()
 
     class Receiver:
+        first_greeting = True
+
+        async def handle_EHLO(self, server, session, envelope, hostname, responses):
+            # Verify that a signup still receives one usable code after a dropped greeting.
+            if self.first_greeting:
+                self.first_greeting = False
+                server.transport.close()
+            session.host_name = hostname
+            return responses
+
         async def handle_DATA(self, server, session, envelope):
             message = BytesParser(policy=policy.default).parsebytes(envelope.content)
             with path.open("a", encoding="utf-8") as output:
