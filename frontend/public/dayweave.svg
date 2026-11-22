@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <style>
+    .thread { stroke: #315b45 }
+    @media (prefers-color-scheme: dark) { .thread { stroke: #a4c8a3 } }
+  </style>
+  <defs>
+    <mask id="warp">
+      <path fill="white" d="M0 0h40v40H0z"/>
+      <path stroke="black" stroke-width="8" d="M6 10h7m12 0h7M15 19h8M6 28h7m12 0h7"/>
+    </mask>
+    <mask id="weft">
+      <path fill="white" d="M0 0h40v40H0z"/>
+      <path stroke="black" stroke-width="8" d="M19 6v8M10 15v8m18-8v8M19 24v8"/>
+    </mask>
+  </defs>
+  <g class="thread" stroke-width="4.8" transform="rotate(-11 20 20)">
+    <path mask="url(#warp)" d="M10 7v28M19 3v34M28 4v27"/>
+    <path mask="url(#weft)" d="M6 10h28M3 19h34M4 28h28"/>
+  </g>
+</svg>

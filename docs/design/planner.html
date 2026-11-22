@@ -1,0 +1,242 @@
+<!doctype html>
+<!-- Offline design study. Sample date, tasks and edits live only in this tab. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DayWeave · Planner design</title>
+<style>
+:root{--bg:#f5f5ee;--paper:#fffef9;--ink:#24362c;--muted:#657466;--line:#d8ddd1;--green:#315b44;--deep:#274a37;--mint:#e2eadb;--rust:#a95e3c;--sand:#eee4ce;--serif:Georgia,"Songti SC","Noto Serif CJK SC",SimSun,serif;font:14px/1.5 "Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;color:var(--ink);background:var(--bg)}
+*{box-sizing:border-box}body,h1,h2,h3,p{margin:0}button,input,select{font:inherit;color:inherit}button{cursor:pointer;background:transparent;border:0}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #8a643a;outline-offset:3px}button:hover{filter:brightness(.96)}svg{width:17px;height:17px;stroke:currentColor;stroke-width:1.65;fill:none;stroke-linecap:round;stroke-linejoin:round;flex:none}.top{display:flex;align-items:center;justify-content:space-between;min-height:69px;padding:9px max(24px,4vw);border-bottom:1px solid var(--line);background:var(--paper)}.identity,.top-right,.brand,.date-line,.heading-row,.section-title,.section-title>div,.task-meta,.agenda-head,.agenda-row,.floating-title,.editor-actions,.mode-switch,.action,.date-note,.month-head,.backlog-title,.mini,.selection,.preview-label{display:flex;align-items:center;gap:8px}.brand{gap:8px;font:600 24px var(--serif);letter-spacing:-1.2px}.brand svg{width:32px;height:32px;stroke:none}.identity{gap:20px}.identity>small{border-left:1px solid var(--line);padding-left:16px;font-size:12px;color:var(--muted)}.top-right{gap:13px}.top-right select{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px}.preview-label{color:var(--muted);font-size:11px}.preview-label i{width:6px;height:6px;border-radius:50%;background:#a38657}
+main{max-width:1680px;margin:auto;padding:33px max(22px,4vw) 46px}.date-line{font-size:12px;color:var(--muted)}.date-line:before{content:"";width:25px;height:1px;background:var(--rust)}.heading-row{justify-content:space-between;gap:14px;margin:8px 0 23px}.heading-row h1{font:600 clamp(34px,3.5vw,52px)/1.15 var(--serif);letter-spacing:-.055em}.heading-row .date-note{color:var(--muted);font-size:12px}.tabs-line{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 23px}.mode-switch{gap:3px;padding:4px;background:#e9ece2;border:1px solid #dbe1d4;border-radius:9px;width:max-content;max-width:100%;overflow:auto}.mode-switch button{border-radius:5px;padding:7px 13px;white-space:nowrap;font-size:13px}.mode-switch .current{background:var(--deep);color:white;font-weight:600}.action{padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--paper);font-size:12px;justify-content:center}.action.primary{background:var(--deep);color:#fff;border-color:var(--deep)}.layout{display:grid;grid-template-columns:minmax(225px,260px) minmax(0,1fr);align-items:start;gap:22px}.backlog,.calendar,.agenda{border:1px solid var(--line);border-radius:12px;background:var(--paper);min-width:0}.backlog{overflow:hidden}.backlog-title{position:relative;overflow:hidden;background:var(--deep);color:#f8f6e7;padding:20px 17px;isolation:isolate}.backlog-title h2{font:600 22px var(--serif);letter-spacing:-.04em}.backlog-title svg{width:21px;height:21px}.backlog-title:after{content:"";position:absolute;right:-33px;top:-8px;width:125px;height:85px;background:repeating-radial-gradient(ellipse at 100% 23%,transparent 0 5px,#b0c59681 5px 6px,transparent 6px 9px);transform:rotate(-15deg);z-index:-1}.count{border-radius:5px;min-width:20px;padding:0 4px;text-align:center;background:#e9ede3;color:#5e705e;font-size:11px;line-height:18px}.backlog-title .count{color:#e5ecd7;background:#ffffff22;margin-left:auto}.backlog-body{padding:14px}.backlog-hint{margin:0 0 13px;color:var(--muted);font-size:12px;line-height:1.6}.task-card{display:block;text-align:left;width:100%;border:1px solid var(--line);border-radius:7px;background:#fcfcf7;padding:11px 12px;margin:8px 0}.task-card.armed{border-color:#648b68;background:#edf3e8}.card-label,.tag{display:inline-flex;align-items:center;gap:5px;color:#4e7058;font-size:11px}.dot{display:inline-block;width:6px;height:6px;flex:none;border-radius:50%;background:var(--tone)}.task-card strong,.chip strong{display:block;overflow-wrap:anywhere;font-weight:600}.task-card strong{margin:4px 0 7px;font-size:14px}.task-meta{color:var(--muted);font-size:11px;flex-wrap:wrap}.task-meta svg{width:12px;height:12px}.backlog-foot{padding:10px 15px 13px;color:var(--muted);font-size:11px;border-top:1px solid var(--line)}.backlog-toggle,.backlog-close{display:none}
+.calendar{overflow:hidden}.section-title{justify-content:space-between;padding:17px 20px 15px}.section-title h2{font:600 clamp(23px,2.1vw,35px)/1.22 var(--serif);letter-spacing:-.045em}.week-range{font:500 12px ui-monospace,Menlo,monospace;letter-spacing:.035em;color:var(--muted)}.selection{color:var(--deep);font-size:12px;background:#e5edde;padding:8px 15px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.selection strong{margin-right:auto}.selection button{text-decoration:underline}.week-grid,.month-grid,.daynames{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}.day-col{min-width:0;border-top:1px solid var(--line);border-left:1px solid var(--line);min-height:210px;padding:0 6px 8px}.day-col:first-child{border-left:0}.day-col.chosen,.month-cell.chosen{background:#f0f4eb}.day-select{display:block;text-align:left;width:100%;padding:10px 4px 11px}.day-select span{display:block;font-size:11px;color:var(--muted)}.day-select b,.month-cell .num{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;font:500 21px var(--serif);margin-top:2px}.today .day-select b,.today .num{background:var(--deep);color:white}.chip{display:block;position:relative;text-align:left;width:100%;min-width:0;border:1px solid color-mix(in srgb,var(--tone) 17%,transparent);border-left:3px solid var(--tone);border-radius:5px;background:var(--pale);padding:7px 6px;margin:0 0 6px}.chip small{font-size:10px;color:#586657}.chip strong{font-size:12px;line-height:1.4;margin-top:2px}.col-free{width:100%;min-height:62px;border-radius:5px;text-align:left;color:#8c998a;padding-left:5px;font-size:11px}.floating{padding:12px 18px 16px;border-top:1px dashed #cbd4c3;background:#f7f8f1}.floating-title{display:flex;gap:7px;align-items:center;color:var(--green);font-weight:600;font-size:13px}.floating-title svg{width:15px}.float-items{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.float-items button{display:flex;align-items:center;gap:6px;border:1px solid #ced9c6;border-radius:5px;background:var(--paper);font-size:12px;padding:5px 8px}.float-items button svg{width:12px;height:12px;color:var(--muted)}.empty{font-size:12px;color:var(--muted);padding:10px 0}.agenda{margin-top:15px;padding:14px 18px}.agenda-head{justify-content:space-between;margin-bottom:8px}.agenda-head h2{font:600 19px var(--serif)}.agenda-head span{font-size:11px;color:var(--muted)}.agenda-row{gap:11px;min-height:50px;border-top:1px solid #e3e6dc;padding:7px 0}.agenda-row time{font-size:12px;width:102px;flex:none;color:var(--green)}.agenda-row .title{flex:1;min-width:0}.agenda-row strong{display:block;font-size:14px;font-weight:600;overflow-wrap:anywhere}.agenda-row small{font-size:11px;color:var(--muted)}.mini{min-width:33px;min-height:33px;justify-content:center;border:1px solid var(--line);border-radius:6px;color:var(--muted)}.mini svg{width:14px}.legend{display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-top:15px;font-size:11px;color:var(--muted)}.legend span{display:flex;align-items:center;gap:5px}.daynames>div{padding:6px;text-align:center;background:#f4f5ed;border-top:1px solid var(--line);color:var(--muted);font-size:11px}.month-cell{min-width:0;min-height:70px;padding:5px;border-left:1px solid var(--line);border-top:1px solid var(--line);text-align:left;overflow:hidden}.month-cell:nth-child(7n+1){border-left:0}.month-cell.dim{background:#f6f6f0;color:#9ba294}.month-cell .num{font-size:15px;width:23px;height:23px;margin:0 0 3px}.month-mark{display:flex;align-items:center;gap:4px;width:100%;text-align:left}.month-mark small{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.day-plan{border-top:1px solid var(--line);padding:3px 18px 12px}.day-plan .agenda-row:first-child{border-top:0}.spacer{margin-left:auto}
+dialog{padding:0;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);box-shadow:0 20px 70px #19362038;width:min(440px,calc(100% - 18px));max-height:calc(100dvh - 22px);overflow:auto}dialog::backdrop{background:#1834255a}.dialog-head{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:13px 18px}.dialog-head h2{font:600 22px var(--serif)}.editor-body{padding:15px 18px}.editor-body>strong{display:block;font-size:17px;margin-bottom:12px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.field{display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:12px}.field.wide{grid-column:1/-1}.field input,.field select{width:100%;min-width:0;padding:8px;border:1px solid var(--line);border-radius:5px;background:white}.editor-actions{justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--line)}.hint{font-size:11px;color:var(--muted);margin-top:11px}.scrim{display:none}.screen-note{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);max-width:90vw;background:var(--deep);color:white;border-radius:8px;padding:7px 13px;font-size:12px;box-shadow:0 2px 12px #24352630}.screen-note:empty{display:none}
+@media(min-width:1550px){.layout{grid-template-columns:285px minmax(0,1fr)}.day-col{min-height:245px}}@media(max-width:1150px){.layout{grid-template-columns:210px minmax(0,1fr);gap:13px}main{padding-inline:20px}.section-title{padding-inline:12px}.day-col{padding-inline:3px}.chip{padding:6px 4px}.month-cell{min-height:64px}}@media(max-width:950px){.layout{display:block}.backlog{display:none}.backlog-toggle{display:flex}.backlog.open{display:block;position:fixed;left:8px;top:8px;bottom:8px;width:min(310px,92vw);overflow:auto;z-index:5;box-shadow:0 14px 60px #18342535}.backlog-close{display:grid;place-items:center;color:white;z-index:1;width:30px;height:30px}.scrim.open{display:block;position:fixed;inset:0;background:#14332155;z-index:4}.top{padding-inline:22px}.day-col{min-height:190px}.month-cell{min-height:65px}.layout .section-title{padding:17px}.day-select{padding:8px 5px}.tabs-line{gap:7px}.agenda{margin-top:13px}}@media(max-width:630px){.top{padding:6px 12px;min-height:55px}.identity{gap:7px}.identity>small{display:none}.brand{font-size:19px}.brand svg{width:26px;height:26px}.preview-label{font-size:9px}.top-right{gap:6px}.top-right select{max-width:95px;font-size:11px;padding:6px 2px}main{padding:19px 11px 32px}.heading-row{margin-bottom:14px}.heading-row .date-note{display:none}.tabs-line{align-items:stretch;flex-wrap:wrap;margin-bottom:13px}.mode-switch{max-width:100%;padding:3px;gap:0}.mode-switch button{padding:6px 8px;font-size:11px}.backlog-toggle{padding:5px 8px;font-size:11px}.week-grid .day-col{min-height:125px;padding-inline:2px}.day-select{padding:4px 1px}.day-select span{font-size:10px}.day-select b{font-size:17px;width:25px;height:25px}.chip{border-left-width:2px;padding:4px 2px}.chip strong{font-size:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.chip small{font-size:9px}.col-free{font-size:9px;min-height:44px}.calendar,.agenda{border-radius:8px}.section-title h2{font-size:23px}.week-range{font-size:10px}.layout .section-title,.floating,.agenda{padding:10px}.agenda-row{gap:5px}.agenda-row time{width:68px;font-size:10px}.agenda-row strong{font-size:12px}.month-cell{min-height:47px;padding:3px}.month-mark small{display:none}.month-mark{display:inline-flex;width:auto}.legend{gap:8px;font-size:10px}.form-grid{gap:8px}.month-cell .num{font-size:13px;width:20px;height:20px}.floating-title{font-size:12px}}
+@media(pointer:coarse){button,.mini,.mode-switch button,.backlog-toggle,.top-right select,.field input,.field select,.backlog-close{min-height:44px}.mini,.backlog-close{min-width:44px}.field input,.field select{font-size:16px}.chip{min-height:44px}.backlog-toggle{white-space:nowrap}.month-cell{min-height:55px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+.chat-launch{color:var(--green);background:var(--mint);border-color:#cddac6;font-weight:600}
+#assistant{position:fixed;inset:10px 10px 10px auto;margin:0;width:min(440px,calc(100vw - 15px));height:calc(100dvh - 20px);max-height:none;padding:0;overflow:hidden;flex-direction:column}
+#assistant[open]{display:flex}#assistant::backdrop{background:#253d2b29}
+.chat-header,.draft-heading,.chat-actions,.suggestions,.composer-foot,.chat-mode{display:flex;align-items:center;gap:8px}
+.chat-header{padding:12px 15px;justify-content:space-between;border-bottom:1px solid var(--line);background:#f6f7ef}.chat-header h2{font:600 20px var(--serif);display:flex;align-items:center;gap:8px}.chat-header h2 svg{color:var(--green)}
+.chat-flow{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px 15px}.chat-intro h3{font:600 23px var(--serif);margin:8px 0}.chat-intro p,.chat-caption,.draft-heading small,.receipt small{font-size:12px;color:var(--muted)}.chat-intro p{line-height:1.65}
+.chat-user{width:fit-content;max-width:94%;margin:0 0 13px auto;padding:9px 12px;background:#e5ebdc;border-radius:8px 8px 2px 8px;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.draft-card{border:1px solid #bdcdb9;border-radius:9px;overflow:hidden;margin-bottom:16px;background:var(--paper)}.draft-heading{padding:12px 13px;background:#e8eee1;color:var(--green)}.draft-heading>svg{width:22px;height:22px}.draft-heading strong,.draft-heading small,.receipt strong,.receipt small{display:block}.draft-heading strong{font-size:15px}.draft-form .form-grid{padding:13px;gap:10px}.draft-form .chat-actions{justify-content:flex-end;padding:10px 13px;border-top:1px solid var(--line)}.draft-form input,.draft-form select{background:#f9faf4;min-height:38px}
+.receipt{padding:13px}.receipt .action{margin-top:9px}.cancelled .draft-heading{background:#f2f2ea;color:var(--muted)}
+.chat-composer{padding:11px 14px;border-top:1px solid var(--line);background:#f6f7ef}.chat-composer form{padding:9px;background:var(--paper);border:1px solid #cbd4c4;border-radius:8px}.chat-composer textarea{display:block;width:100%;border:none;background:transparent;color:var(--ink);font:inherit;resize:vertical;min-height:46px;max-height:18dvh;line-height:1.5}.composer-foot{justify-content:space-between}.suggestions{flex-wrap:wrap;margin-bottom:8px}.suggestions button,.chat-mode{color:var(--green);border:1px solid var(--line);background:var(--paper);padding:5px 8px;border-radius:6px;font-size:11px}.chat-mode{border:none;background:none;padding-left:0;color:var(--muted);gap:5px}.chat-mode svg{width:14px;height:14px}.chat-send{background:var(--green);color:white;border:0;border-radius:6px;padding:6px 10px;display:flex;align-items:center;gap:5px;font-size:12px}.chat-caption{padding:5px 0 2px}.local-settings{margin-bottom:12px;padding:12px;border:1px solid var(--line);border-radius:7px;background:var(--paper)}.local-settings select{max-width:150px}.receipt>strong{overflow-wrap:anywhere}
+@media(pointer:coarse){.chat-actions button,.chat-launch,.chat-send,.suggestions button,.chat-mode,.draft-form input,.draft-form select{min-height:44px}.draft-form input,.draft-form select,.chat-composer textarea{font-size:16px}}
+@media(max-width:630px){.chat-launch{min-width:36px;padding:6px}.chat-launch span,.preview-label i{display:none}#assistant{inset:4px;margin-left:auto;width:min(440px,calc(100vw - 8px));height:calc(100dvh - 8px)}.chat-header,.chat-flow,.chat-composer{padding:10px}.chat-flow{padding-bottom:3px}.chat-header h2{font-size:17px}.chat-composer textarea{min-height:38px}.chat-mode{max-width:70%;text-align:left}.draft-form .form-grid{gap:6px;padding:9px}}
+</style>
+</head>
+<body>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><defs>
+<symbol id="inbox" viewBox="0 0 24 24"><path d="m3 14 3-8h12l3 8v5H3zM3 14h5l2 3h4l2-3h5"/></symbol>
+<symbol id="cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></symbol>
+<symbol id="flag" viewBox="0 0 24 24"><path d="M5 21V4c5-3 9 3 15 0v11c-6 3-10-3-15 0"/></symbol>
+<symbol id="edit" viewBox="0 0 24 24"><path d="m4 15 11-11 5 5L9 20l-6 1zM13 6l5 5"/></symbol>
+<symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h15m-6-6 6 6-6 6"/></symbol>
+<symbol id="x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="stack" viewBox="0 0 24 24"><path d="m3 7 9-4 9 4-9 4zM3 12l9 4 9-4M3 17l9 4 9-4"/></symbol>
+<symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M4 9h16M4 15h16"/></symbol>
+<symbol id="spark" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.8 5.8l12.4 12.4m0-12.4L5.8 18.2"/></symbol>
+<symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 11a7 7 0 0 0 14 0m-7 7v4m-3 0h6"/></symbol>
+</defs></svg>
+<div id="app"></div><dialog id="editor"></dialog><dialog id="assistant" aria-labelledby="assistant-name"></dialog><div class="screen-note" id="note" role="status"></div>
+<script>
+const langs=['en','zh-CN','ja'], params=new URLSearchParams(location.search);
+let lang=langs.includes(params.get('lang'))?params.get('lang'):'en';
+const periods=['today','tomorrow','week','next','month'];
+let mode=periods.includes(params.get('view'))?params.get('view'):'week';
+const today='2026-11-18', monday='2026-11-16';
+let selected=mode==='tomorrow'?'2026-11-19':mode==='next'?'2026-11-23':today,armed=null,backlogOpen=false,editId=null,noteTimer;
+const words={
+ title:['Planner','日程规划','プランナー'],workspace:['Personal workspace','个人工作区','個人ワークスペース'],prototype:['Design preview','设计样稿','デザイン見本'],language:['Language','界面语言','表示言語'],
+ today:['Today','今天','今日'],tomorrow:['Tomorrow','明天','明日'],week:['This week','本周','今週'],next:['Next week','下周','来週'],month:['This month','本月','今月'],
+ backlog:['Backlog','待安排','未予定'],backHint:['Pick a task, then choose a date to schedule it.','先选待办，再点日历里的日期安排。','タスクを選んでから日付をタップします。'],
+ backFoot:['Tasks stay here until you give them a plan.','尚无计划的任务会保留在这里。','予定を決めるまで、タスクはここに残ります。'],work:['Work','工作','仕事'],learn:['Learning','学习','学習'],life:['Life','生活','生活'],
+ close:['Close','关闭','閉じる'],floatWeek:['This week · date to decide','本周待定日期','今週・日付未定'],floatNext:['Next week · date to decide','下周待定日期','来週・日付未定'],floatMonth:['This month · date to decide','本月待定日期','今月・日付未定'],
+ none:['No items','暂无任务','タスクなし'],dayDetail:['Selected day','选中日程','選択日の予定'],noPlan:['No planned tasks for this day.','这天还没有安排任务。','この日の予定はまだありません。'],
+ m:[' min',' 分钟','分'],morning:['Morning','上午','午前'],afternoon:['Afternoon','下午','午後'],evening:['Evening','晚上','夜'],any:['Any time','不限时段','時間未定'],exact:['Exact time','具体时刻','時刻を指定'],
+ plan:['Planning horizon','计划精度','予定の単位'],day:['Specific day','具体日期','日付を指定'],start:['Start','开始','開始'],end:['End','结束','終了'],slot:['Time of day','计划时段','時間帯'],dayDate:['Planned date','计划日期','予定日'],
+ due:['Deadline','截止日期','締切日'],unscheduled:['No date','日期待定','日付未定'],edit:['Edit schedule','编辑安排','予定を編集'],editTime:['Edit time','编辑时间','時間を編集'],save:['Save plan','保存安排','予定を保存'],
+ cancel:['Cancel','取消','キャンセル'],chooseDay:['Choose a day for','选择执行日期','実行する日を選択'],sample:['Sample data · Changes last for this tab only.','示例数据 · 修改仅在当前页面有效。','サンプルデータ・変更はこのタブのみに反映されます。'],
+ saved:['Schedule updated','安排已更新','予定を更新しました'],badTime:['End time must be later than start time.','结束时刻须晚于开始时刻。','終了は開始より後に設定してください。'],
+ workTime:['Trading minutes','工作时段','作業時間'],editHint:['Set the deadline independently of the execution date.','截止日期和计划执行时间分别保存。','締切日と実行予定は個別に設定します。'],
+ calendar:['Calendar','日历','カレンダー'],period:['Planning periods','计划周期','表示期間'],timeZone:['Hong Kong time','香港时间','香港時間'],weekNo:['Week','第','第'],weekEnd:['','周','週'],moveBack:['Move to backlog','移回待安排','未予定に戻す'],
+ projects:[['Navigation tools','Personal study','Daily life'],['导航工具','个人学习','日常生活'],['ナビ開発','自主学習','日々の暮らし']],
+ assist:['Assistant','织日助手','アシスタント'],hideAssist:['Collapse assistant','收起助手','アシスタントを閉じる'],sampleMode:['Offline example','离线样例','オフラインの例'],
+ intro:['Plan from a message','通过对话安排工作','会話から予定を作成'],introBody:['Try the sample transcript or enter a task. Review the editable draft before creating it.','试用模拟口述，或直接输入任务。编辑草稿并确认后才会创建。','模擬音声の例を試すか、タスクを入力してください。下書きを編集して確定すると作成されます。'],
+ voiceExample:['Sample dictation','模拟口述','模擬音声'],sampleText:['This week, prepare integration notes for 45 minutes, due Friday.','本周整理联调笔记，预计45分钟，周五截止。','今週、連携テストのメモをまとめる。所要時間は45分、締切は金曜日。'],sampleTitle:['Prepare integration notes','整理联调笔记','連携テストのメモをまとめる'],
+ audioMock:['Simulated transcript · Edit before sending','模拟转写 · 可编辑后发送','模擬文字起こし・編集して送信'],ask:['Enter a task…','输入要安排的任务…','予定にしたいタスクを入力…'],send:['Send','发送','送信'],
+ titleField:['Task title','任务标题','タスク名'],minutesField:['Estimate (minutes)','预计耗时（分钟）','見積時間（分）'],newDraft:['New task draft','新任务草稿','新規タスクの下書き'],pending:['Saved to the planner only after confirmation','确认前不会加入计划','確定すると予定に追加されます'],
+ approve:['Confirm creation','确认创建','作成を確定'],drop:['Cancel draft','取消草稿','下書きを取消'],created:['Task created','任务已创建','タスクを作成しました'],dropped:['Draft cancelled','草稿已取消','下書きを取り消しました'],noTask:['No task was created.','未创建任务。','タスクは作成されていません。'],jump:['Show in planner','查看安排','予定を表示'],settings:['Settings','设置','設定'],unassigned:['Uncategorized','未分类','未分類'],needsDate:['Choose a planned date.','请选择计划日期。','予定日を選んでください。'],
+};
+const msg=k=>words[k][langs.indexOf(lang)];
+const palette={work:['#51745b','#e9efe3'],learn:['#987345','#f3eddc'],life:['#a66a4d','#f6e8df']};
+const keyDate=d=>d.toISOString().slice(0,10), date=s=>new Date(s+'T12:00:00Z'),add=(s,n)=>keyDate(new Date(date(s).getTime()+n*86400000));
+const fmt=(s,opts)=>new Intl.DateTimeFormat(lang,{timeZone:'UTC',...opts}).format(date(s));
+const dateRange=(a,b)=>new Intl.DateTimeFormat(lang,{timeZone:'UTC',month:'short',day:'numeric'}).formatRange(date(a),date(b));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon=n=>'<svg aria-hidden="true"><use href="#'+n+'"></use></svg>';
+const brand='<span class="brand"><svg viewBox="0 0 36 36" aria-hidden="true"><g fill="#315c46" transform="rotate(-12 18 18)"><path d="M6 6h5v8H6zm0 12h5v14H6zM15 2h5v21h-5zm0 25h5v7h-5zM24 5h5v9h-5zm0 13h5v14h-5z"/><path d="M3 10h10v4H3zm19 0h11v4H22zM3 19h1v4H3zm10 0h10v4H13zm18 0h3v4h-3zM3 28h10v4H3zm19 0h11v4H22z"/></g></svg>DayWeave</span>';
+const tasks=[];
+function task(id,title,category,minutes,plan='',slot='any',due='',start='',end=''){tasks.push({id,title,category,minutes,plan,slot,due,start,end})}
+task(1,['Review cost estimates','复核采购报价','調達見積を確認'], 'work',30,'','any','2026-11-20');
+task(2,['Read the QoS chapter','阅读 QoS 章节','QoS の章を読む'],'learn',45);
+task(3,['Book the bike service','预约自行车保养','自転車の点検を予約'],'life',15);
+task(4,['Triage latency reports','整理延迟问题记录','遅延レポートを整理'],'work',40);
+task(5,['Draft test protocol','起草测试流程','テスト手順を作成'],'work',45,'week');
+task(6,['Review learning notes','回顾学习笔记','学習ノートを確認'],'learn',30,'week');
+task(7,['Sync the interface contract','确认接口约定','仕様をすり合わせる'],'work',45,'2026-11-16','exact','','10:00','10:45');
+task(8,['Read tracing guide','阅读追踪指南','トレース手順を読む'],'learn',30,'2026-11-17','afternoon');
+task(9,['Navigation integration','导航接口联调','ナビ連携テスト'],'work',90,today,'exact','2026-11-20','09:30','11:00');
+task(10,['Profile ROS 2 tracing','研究 ROS 2 tracing','ROS 2 tracing を検証'],'learn',60,today,'afternoon','2026-11-21');
+task(11,['Pick up the parcel','取预约的包裹','荷物を受け取る'],'life',20,'2026-11-19','evening');
+task(12,['Run regression checks','执行回归测试','回帰試験を実施'],'work',60,'2026-11-20','exact','','14:00','15:00');
+task(13,['Visit the bookshop','逛独立书店','書店を訪ねる'],'life',45,'2026-11-21','afternoon');
+task(14,['Plan next iteration','梳理下一轮计划','次の開発計画を整理'],'work',45,'next');
+task(15,['Review the month','整理本月回顾','今月を振り返る'],'learn',50,'month');
+task(16,['Design review','设计评审','設計レビュー'],'work',60,'2026-11-24','morning');
+task(17,['Outline a reading list','列出阅读清单','読書リストを整理'],'learn',25,'2026-11-03','afternoon');
+task(18,['Monthly expenses','核对月度开支','月の支出を確認'],'life',35,'2026-11-09','evening');
+task(19,['Write integration notes','补充联调说明','連携メモを追記'],'work',40,'2026-11-27','afternoon');
+const name=t=>t.title[langs.indexOf(lang)], tone=t=>'--tone:'+(palette[t.category]||['#758374','#eef1e9'])[0]+';--pale:'+(palette[t.category]||['#758374','#eef1e9'])[1];
+const estimate=t=>t.minutes?t.minutes+msg('m'):'';
+const clock=t=>t.slot==='exact'?t.start+'–'+t.end:msg(t.slot);
+const planned=day=>tasks.filter(t=>t.plan===day).sort((a,b)=>{const order=t=>t.slot==='exact'?t.start:({morning:'09:00',afternoon:'14:00',evening:'19:00',any:'24:00'}[t.slot]);return order(a).localeCompare(order(b))});
+const dateOnly={month:'short',day:'numeric'};
+function project(t){if(t.category==='unassigned')return msg('unassigned');return msg('projects')[['work','learn','life'].indexOf(t.category)]}
+function taskCard(t){return '<button class="task-card '+(armed===t.id?'armed':'')+'" data-arm="'+t.id+'" style="'+tone(t)+'" aria-pressed="'+(t.id===armed)+'"><span class="card-label"><i class="dot"></i>'+msg(t.category)+'</span><strong>'+esc(name(t))+'</strong><span class="task-meta">'+(t.minutes?icon('clock')+estimate(t):'')+(t.due?' '+icon('flag')+fmt(t.due,dateOnly):'')+'</span></button>'}
+function chip(t){return '<button class="chip" data-edit="'+t.id+'" style="'+tone(t)+'"><small>'+esc(clock(t))+'</small><strong>'+esc(name(t))+'</strong></button>'}
+function agendaRows(day){const list=planned(day);return list.length?list.map(t=>'<div class="agenda-row" style="'+tone(t)+'"><time>'+clock(t)+'</time><i class="dot"></i><div class="title"><strong>'+esc(name(t))+'</strong><small>'+esc(project(t))+(t.minutes?' · '+estimate(t):'')+(t.due?' · '+msg('due')+' '+fmt(t.due,dateOnly):'')+'</small></div><button class="mini" data-edit="'+t.id+'" aria-label="'+msg('editTime')+' '+esc(name(t))+'" title="'+msg('editTime')+'">'+icon('edit')+'</button></div>').join(''):'<p class="empty">'+msg('noPlan')+'</p>'}
+function floating(){const k=mode==='next'?'next':mode==='month'?'month':'week', list=tasks.filter(t=>t.plan===k);return '<section class="floating"><div class="floating-title">'+icon('stack')+msg(k==='week'?'floatWeek':k==='next'?'floatNext':'floatMonth')+'<span class="count">'+list.length+'</span></div><div class="float-items">'+(list.length?list.map(t=>'<button style="'+tone(t)+'" data-edit="'+t.id+'"><i class="dot"></i>'+esc(name(t))+icon('edit')+'</button>').join(''):'<span class="empty">'+msg('none')+'</span>')+'</div></section>'}
+function weekGrid(start){return '<div class="week-grid">'+Array.from({length:7},(_,i)=>{const day=add(start,i), items=planned(day);return '<div class="day-col '+(day===today?'today ':'')+(selected===day?'chosen':'')+'"><button class="day-select" data-day="'+day+'" aria-pressed="'+(day===selected)+'"><span>'+fmt(day,{weekday:'short'})+'</span><b>'+Number(day.slice(-2))+'</b></button>'+items.map(chip).join('')+(!items.length&&armed?'<button class="col-free" data-day="'+day+'">＋</button>':'')+'</div>'}).join('')+'</div>'}
+function monthGrid(){const first='2026-10-26';return '<div class="daynames">'+Array.from({length:7},(_,i)=>'<div>'+fmt(add(monday,i),{weekday:'short'})+'</div>').join('')+'</div><div class="month-grid">'+Array.from({length:42},(_,i)=>{const day=add(first,i),items=planned(day);return '<button class="month-cell '+(day.slice(5,7)!=='11'?'dim ':'')+(day===today?'today ':'')+(selected===day?'chosen':'')+'" data-day="'+day+'" aria-label="'+esc(fmt(day,{month:'long',day:'numeric',weekday:'long'}))+'" aria-pressed="'+(day===selected)+'"><b class="num">'+Number(day.slice(-2))+'</b>'+items.slice(0,2).map(t=>'<span class="month-mark" style="'+tone(t)+'"><i class="dot"></i><small>'+esc(name(t))+'</small></span>').join('')+(items.length>2?'<small>+'+(items.length-2)+'</small>':'')+'</button>'}).join('')+'</div>'}
+function render(){document.documentElement.lang=lang;
+  const weekStart=mode==='next'?add(monday,7):monday, daily=mode==='today'||mode==='tomorrow',back=tasks.filter(t=>!t.plan);
+  const head=daily?fmt(selected,{month:'long',day:'numeric',weekday:'long'}):mode==='month'?fmt(today,{month:'long',year:'numeric'}):dateRange(weekStart,add(weekStart,6));
+  const weekId=mode==='next'?48:47;
+  const selection=armed?'<div class="selection">'+icon('cal')+'<span>'+msg('chooseDay')+'</span><strong>'+esc(name(tasks.find(t=>t.id===armed)))+'</strong><button data-cancel-arm>'+msg('cancel')+'</button></div>':'';
+  document.getElementById('app').innerHTML='<header class="top"><div class="identity">'+brand+'</div><div class="top-right"><button class="action chat-launch" data-open-chat aria-label="'+msg('assist')+'">'+icon('spark')+'<span>'+msg('assist')+'</span></button><span class="preview-label"><i></i>'+msg('prototype')+'</span><select id="language" aria-label="'+msg('language')+'">'+langs.map((code,i)=>'<option value="'+code+'" '+(code===lang?'selected':'')+'>'+['English','简体中文','日本語'][i]+'</option>').join('')+'</select></div></header>'+
+  '<main><div class="date-line">'+fmt(today,{year:'numeric',month:'long',day:'numeric',weekday:'long'})+'</div><div class="heading-row"><h1>'+msg('title')+'</h1><div class="date-note">'+icon('globe')+msg('timeZone')+' · UTC+8</div></div><div class="tabs-line"><nav class="mode-switch" aria-label="'+msg('period')+'">'+periods.map(k=>'<button class="'+(mode===k?'current':'')+'" aria-pressed="'+(k===mode)+'" data-view="'+k+'">'+msg(k)+'</button>').join('')+'</nav><button class="action backlog-toggle" data-backlog>'+icon('inbox')+msg('backlog')+'<span class="count">'+back.length+'</span></button></div>'+
+  '<div class="layout"><aside class="backlog '+(backlogOpen?'open':'')+'" aria-label="'+msg('backlog')+'"><div class="backlog-title">'+icon('inbox')+'<h2>'+msg('backlog')+'</h2><span class="count">'+back.length+'</span><button class="backlog-close" data-backlog aria-label="'+msg('close')+'">'+icon('x')+'</button></div><div class="backlog-body"><p class="backlog-hint">'+msg('backHint')+'</p>'+back.map(taskCard).join('')+'</div><p class="backlog-foot">'+msg('backFoot')+'</p></aside><section><div class="calendar"><header class="section-title"><div><h2>'+head+'</h2></div><span class="week-range">'+(daily||mode==='month'?msg('calendar'):(msg('weekNo')+' '+weekId+' '+msg('weekEnd')).trim())+'</span></header>'+selection+
+  (daily?'<section class="day-plan">'+(armed?'<button class="action primary" data-day="'+selected+'">'+icon('cal')+fmt(selected,dateOnly)+'</button>':'')+agendaRows(selected)+'</section>':mode==='month'?monthGrid():weekGrid(weekStart))+
+  floating()+'</div>'+(!daily?'<section class="agenda"><header class="agenda-head"><h2>'+fmt(selected,{month:'long',day:'numeric',weekday:'short'})+'</h2><span>'+msg('dayDetail')+'</span></header>'+agendaRows(selected)+'</section>':'')+
+  '<div class="legend">'+Object.keys(palette).map(c=>'<span style="--tone:'+palette[c][0]+'"><i class="dot"></i>'+msg(c)+'</span>').join('')+'</div></section></div></main><button class="scrim '+(backlogOpen?'open':'')+'" data-backlog aria-label="'+msg('close')+'"></button>';
+}
+function opt(v,label,active){return '<option value="'+v+'" '+(active===v?'selected':'')+'>'+label+'</option>'}
+function openEditor(id,override){const t=tasks.find(t=>t.id===id);if(!t)return;editId=id;const initial=override||t.plan,kind=/^\d/.test(initial)?'day':(initial||'none');
+  const d=document.getElementById('editor');d.innerHTML='<form id="edit-form"><header class="dialog-head"><h2>'+msg('edit')+'</h2><button type="button" class="mini" data-close-editor aria-label="'+msg('close')+'">'+icon('x')+'</button></header><div class="editor-body"><strong>'+esc(name(t))+'</strong><div class="form-grid"><label class="field wide">'+msg('plan')+'<select name="kind">'+[['none','backlog'],['week','week'],['next','next'],['month','month'],['day','day']].map(([k,l])=>opt(k,msg(l),kind)).join('')+'</select></label><label class="field day-only">'+msg('dayDate')+'<input type="date" name="day" value="'+(kind==='day'?initial:selected)+'"></label><label class="field day-only">'+msg('slot')+'<select name="slot">'+['any','morning','afternoon','evening','exact'].map(k=>opt(k,msg(k),t.slot)).join('')+'</select></label><label class="field exact-only">'+msg('start')+'<input type="time" name="start" value="'+(t.start||'')+'"></label><label class="field exact-only">'+msg('end')+'<input type="time" name="end" value="'+(t.end||'')+'"></label><label class="field wide">'+msg('due')+'<input type="date" name="due" value="'+esc(t.due)+'"></label></div><p class="hint">'+msg('editHint')+'</p></div><footer class="editor-actions"><button type="button" class="action" data-close-editor>'+msg('cancel')+'</button><button class="action primary" type="submit">'+msg('save')+'</button></footer></form>';
+  const f=d.querySelector('form');function fields(){const day=f.elements.kind.value==='day',exact=day&&f.elements.slot.value==='exact';d.querySelectorAll('.day-only').forEach(e=>e.style.display=day?'flex':'none');d.querySelectorAll('.exact-only').forEach(e=>e.style.display=exact?'flex':'none');f.elements.day.required=day;f.elements.start.required=exact;f.elements.end.required=exact;f.elements.end.setCustomValidity('')}
+  f.addEventListener('change',fields);fields();
+  f.onsubmit=e=>{e.preventDefault();const data=new FormData(f),kind=data.get('kind'),slot=kind==='day'?data.get('slot'):'any';
+    if(slot==='exact'&&data.get('end')<=data.get('start')){f.elements.end.setCustomValidity(msg('badTime'));f.reportValidity();return}
+    t.plan=kind==='none'?'':kind==='day'?data.get('day'):kind;t.slot=slot;t.start=slot==='exact'?data.get('start'):'';t.end=slot==='exact'?data.get('end'):'';t.due=data.get('due');
+    if(kind==='day')selected=t.plan;armed=null;backlogOpen=false;d.close();render();showNote(msg('saved'))};
+  if(!d.open)d.showModal();
+}
+function showNote(text){clearTimeout(noteTimer);const n=document.getElementById('note');n.textContent=text;noteTimer=setTimeout(()=>n.textContent='',2200)}
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.hasAttribute('data-close-editor')){document.getElementById('editor').close();return}
+ if(b.hasAttribute('data-backlog'))backlogOpen=!backlogOpen;
+ else if(b.hasAttribute('data-cancel-arm'))armed=null;
+ else if(b.dataset.view){mode=b.dataset.view;selected=mode==='tomorrow'?add(today,1):mode==='next'?add(monday,7):today}
+ else if(b.dataset.arm){armed=armed===Number(b.dataset.arm)?null:Number(b.dataset.arm);backlogOpen=false;if(mode==='today'||mode==='tomorrow'){render();if(armed)openEditor(armed,selected);return}}
+ else if(b.dataset.edit){openEditor(Number(b.dataset.edit));return}
+ else if(b.dataset.day){selected=b.dataset.day;if(armed){render();openEditor(armed,selected);return}}
+ else return;
+ render();
+});
+document.addEventListener('change',e=>{if(e.target.id==='language'){lang=e.target.value;render()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&backlogOpen){backlogOpen=false;render()}});
+const assistant=document.getElementById('assistant'),turns=[];
+let chatInput='',voiceExample=false,chatSettings=false;
+function newDraft(text){
+  const lower=text.toLowerCase(), sample=words.sampleText.indexOf(text.trim());
+  const next=/next week|下周|来週/i.test(text), tomorrow=/tomorrow|明天|明日/i.test(text);
+  const day=tomorrow?add(today,1):/today|今天|今日/i.test(text)?today:'';
+  const kind=day?'day':next?'next':/this week|本周|这周|今週/i.test(text)?'week':/this month|本月|这个月|今月/i.test(text)?'month':'none';
+  const duration=text.match(/(\d+)\s*(?:minutes?|mins?|分钟|分)/i);
+  const cutoff=/(?:due|deadline|截止|締切|締め切り)/i.test(text);
+  const explicit=cutoff&&text.match(/(?:due|deadline|截止|締切|締め切り)[^\d]{0,7}(\d{4}-\d{2}-\d{2})/i);
+  const friday=/friday|周五|金曜/i.test(text),due=explicit?explicit[1]:cutoff&&friday?( /next friday|下周五|来週金曜/i.test(text)?add(monday,11):add(monday,4)):'';
+  let title=sample>=0?words.sampleTitle[sample]:text.trim()
+      .replace(/^(?:this week|next week|this month|today|tomorrow|本周|这周|下周|本月|今天|明天|今週|来週|今月|今日|明日)[\s,，、]*/i,'')
+      .replace(/(?:[，,。;；]|\s+for\s+)\s*(?:预计|所要時間は)?\s*\d+\s*(?:minutes?|mins?|分钟|分).*$/i,'')
+      .replace(/[，,。;；]\s*(?:due|deadline|周五截止|下周五截止|締切).*$/i,'').replace(/[。.!]+$/,'').trim();
+  return {id:turns.length+1,input:text,title:title||text,kind,day:day||today,minutes:duration?duration[1]:'',due,state:'pending',taskId:null};
+}
+function chatDraft(t){
+  const pending=t.state==='pending',done=t.state==='created';
+  const title=pending?'newDraft':done?'created':'dropped';
+  const current=tasks.find(item=>item.id===t.taskId);
+  const where=pending?'pending':done?(t.kind==='day'?'day':t.kind==='none'?'backlog':t.kind):'noTask';
+  const head='<div class="draft-heading">'+icon(pending?'edit':done?'cal':'x')+'<div><strong>'+msg(title)+'</strong><small>'+msg(where)+'</small></div></div>';
+  if(!pending)return '<article class="draft-card '+(done?'created':'cancelled')+'" data-turn="'+t.id+'">'+head+'<div class="receipt"><strong>'+esc(current?name(current):t.title)+'</strong>'+(done?'<button type="button" class="action" data-show-task="'+t.id+'">'+msg('jump')+icon('arrow')+'</button>':'')+'</div></article>';
+  return '<article class="draft-card" data-turn="'+t.id+'">'+head+'<form class="draft-form" data-draft="'+t.id+'"><div class="form-grid">'+
+    '<label class="field wide">'+msg('titleField')+'<input name="title" required maxlength="180" value="'+esc(t.title)+'"></label>'+
+    '<label class="field '+(t.kind==='day'?'':'wide')+'">'+msg('plan')+'<select name="kind">'+[['none','backlog'],['week','week'],['next','next'],['month','month'],['day','day']].map(([k,l])=>opt(k,msg(l),t.kind)).join('')+'</select></label>'+
+    (t.kind==='day'?'<label class="field">'+msg('dayDate')+'<input type="date" name="day" required value="'+esc(t.day)+'"></label>':'')+
+    '<label class="field">'+msg('minutesField')+'<input name="minutes" type="number" min="1" max="525600" value="'+esc(t.minutes)+'"></label>'+
+    '<label class="field">'+msg('due')+'<input name="due" type="date" value="'+esc(t.due)+'"></label></div>'+
+    '<footer class="chat-actions"><button class="action" type="button" data-drop="'+t.id+'">'+msg('drop')+'</button><button type="submit" class="action primary">'+msg('approve')+'</button></footer></form></article>';
+}
+function settingsExample(){return '<div class="local-settings"><label class="field">'+msg('language')+'<select id="chat-language">'+langs.map((code,i)=>opt(code,['English','简体中文','日本語'][i],lang)).join('')+'</select></label></div>'}
+function drawChat(){
+  const old=assistant.querySelector('.chat-flow')?.scrollTop||0;
+  assistant.innerHTML='<header class="chat-header"><h2 id="assistant-name">'+icon('spark')+msg('assist')+'</h2><button type="button" class="mini" data-hide-chat aria-label="'+msg('hideAssist')+'">'+icon('x')+'</button></header>'+
+    '<div class="chat-flow">'+(chatSettings?settingsExample():'')+(!turns.length?'<div class="chat-intro"><h3>'+msg('intro')+'</h3><p>'+msg('introBody')+'</p></div>':'')+
+    turns.map(t=>'<div class="chat-user">'+esc(t.input)+'</div>'+chatDraft(t)).join('')+'</div>'+
+    '<div class="chat-composer"><div class="suggestions"><button type="button" data-sample>'+icon('mic')+' '+msg('voiceExample')+'</button><button type="button" data-local-settings>'+msg('settings')+'</button></div>'+
+    '<form id="composer"><textarea name="text" rows="2" maxlength="500" required aria-label="'+msg('ask')+'" placeholder="'+msg('ask')+'">'+esc(chatInput)+'</textarea><div class="composer-foot"><span class="chat-mode">'+icon(voiceExample?'mic':'spark')+msg(voiceExample?'audioMock':'sampleMode')+'</span><button class="chat-send" type="submit">'+msg('send')+icon('arrow')+'</button></div></form></div>';
+  assistant.querySelector('.chat-flow').scrollTop=old;
+}
+function reveal(t){
+  if(t.kind==='none'){if(innerWidth<=950)backlogOpen=true}
+  else if(t.kind==='day'){
+    selected=t.day;
+    mode=selected===today?'today':selected===add(today,1)?'tomorrow':(selected>=monday&&selected<=add(monday,6))?'week':(selected>=add(monday,7)&&selected<=add(monday,13))?'next':'month';
+  }else{mode=t.kind;selected=mode==='next'?add(monday,7):today}
+  render();
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.hasAttribute('data-open-chat')){drawChat();assistant.showModal();return}
+  if(b.hasAttribute('data-hide-chat')){assistant.close();return}
+  if(b.hasAttribute('data-sample')){chatInput=msg('sampleText');voiceExample=true;drawChat();assistant.querySelector('textarea').focus();return}
+  if(b.hasAttribute('data-local-settings')){chatSettings=!chatSettings;drawChat();assistant.querySelector('.chat-flow').scrollTop=0;return}
+  const t=turns.find(v=>v.id===Number(b.dataset.drop||b.dataset.showTask));
+  if(t&&b.dataset.drop&&t.state==='pending'){t.state='cancelled';drawChat()}
+  if(t&&b.dataset.showTask&&t.state==='created'){assistant.close();reveal(t)}
+});
+assistant.addEventListener('input',e=>{
+  const input=e.target,form=input.closest('[data-draft]');
+  if(input.name==='text'){chatInput=input.value;return}
+  const t=form&&turns.find(x=>x.id===Number(form.dataset.draft));
+  if(t&&t.state==='pending'&&['title','kind','minutes','due','day'].includes(input.name))t[input.name]=input.value;
+});
+assistant.addEventListener('change',e=>{
+  if(e.target.id==='chat-language'){lang=e.target.value;render();drawChat();return}
+  if(e.target.name==='kind'){const t=turns.find(x=>x.id===Number(e.target.form.dataset.draft));t.kind=e.target.value;drawChat();assistant.querySelector('[data-draft="'+t.id+'"] select').focus({preventScroll:true})}
+});
+assistant.addEventListener('submit',e=>{
+  e.preventDefault();const f=e.target;
+  if(f.id==='composer'){
+    const text=chatInput.trim();if(!text)return;
+    if(/^(settings|open settings|设置|打开设置|設定)$/i.test(text)){chatSettings=true;chatInput='';voiceExample=false;drawChat();assistant.querySelector('.chat-flow').scrollTop=0;return}
+    const draft=newDraft(text);turns.push(draft);chatInput='';voiceExample=false;chatSettings=false;drawChat();
+    assistant.querySelector('[data-turn="'+draft.id+'"]').scrollIntoView({block:'nearest'});return;
+  }
+  const t=turns.find(x=>x.id===Number(f.dataset.draft));
+  if(!t||t.state!=='pending'||!t.title.trim()||!f.checkValidity())return;
+  t.state='created';t.taskId=Math.max(...tasks.map(x=>x.id))+1;
+  task(t.taskId,[t.title.trim(),t.title.trim(),t.title.trim()],'unassigned',t.minutes?Number(t.minutes):null,t.kind==='none'?'':t.kind==='day'?t.day:t.kind,'any',t.due);
+  if(t.kind!=='none')reveal(t);else render();
+  drawChat();
+});
+assistant.addEventListener('keydown',e=>{if(e.target.name==='text'&&e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();e.target.form.requestSubmit()}});
+assistant.addEventListener('close',()=>document.querySelector('[data-open-chat]')?.focus({preventScroll:true}));
+render();
+</script>
+</body>
+</html>

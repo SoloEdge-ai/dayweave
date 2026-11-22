@@ -1,0 +1,13 @@
+{
+  "name": "dayweave-browser-checks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node check.mjs",
+    "preview": "node preview.mjs",
+    "demo": "node preview.mjs --interactive"
+  },
+  "devDependencies": {
+    "playwright": "1.61.0"
+  }
+}
