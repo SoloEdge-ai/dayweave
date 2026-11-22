@@ -1,3 +1,4 @@
+import { TagPicker } from './tag-picker'
 import { PlanDatePicker, type PlanDate } from './plan-date'
 import { useState, type FormEvent } from 'react'
 import { ExternalLink, Trash2 } from 'lucide-react'
@@ -12,6 +13,7 @@ import {
   safeUrl,
   workspaceLink,
   statusLabels,
+  taskTags,
   typeLabels,
   type Project,
   type Resource,
@@ -63,7 +65,6 @@ function TaskEditor({
     description: t.description ?? '',
     status: t.status ?? 'todo',
     priority: t.priority ?? 'medium',
-    category: t.category ?? '',
     project_id: t.project_id?.toString() ?? '',
     estimated_minutes: t.estimated_minutes?.toString() ?? '',
     scheduled_date: t.scheduled_date ?? '',
@@ -76,6 +77,7 @@ function TaskEditor({
     due_date: t.due_date ?? '',
     due_at: localInput(t.due_at, zone),
   })
+  const [tags, setTags] = useState(taskTags(t))
   const [pinned, setPinned] = useState(t.pinned ?? false),
     [links, setLinks] = useState<number[]>(t.resource_ids ?? []),
     [allow, setAllow] = useState(false)
@@ -117,7 +119,7 @@ function TaskEditor({
             ...v,
             title: v.title.trim(),
             description: v.description.trim(),
-            category: v.category.trim(),
+            tags,
             project_id: v.project_id ? Number(v.project_id) : null,
             estimated_minutes: v.estimated_minutes
               ? Number(v.estimated_minutes)
@@ -199,13 +201,7 @@ function TaskEditor({
               ))}
             </select>
           </Field>
-          <Field label="分类">
-            <input
-              maxLength={80}
-              {...props('category')}
-              placeholder="工作、生活、学习…"
-            />
-          </Field>
+          <TagPicker selected={tags} change={setTags} />
           <label className="check-label wide">
             <input
               type="checkbox"

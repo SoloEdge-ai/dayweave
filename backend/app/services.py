@@ -10,9 +10,10 @@ from .i18n import DomainError, normalize_language
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
-from .models import CalendarSettings, Project, Resource, Settings, Task, TaskChangeLog, now_iso
+from .models import CalendarSettings, Project, Resource, Settings, Tag, Task, TaskChangeLog, now_iso
 from .records import KINDS, active, audit, columns, finish, links, lock_for_write, snapshot
 from .schemas import ProjectInput, ResourceInput, SettingsInput, TaskInput
+from .tags import resolve_tags
 from .time_rules import apply_time_rules, local_today, merge_schedule, week_bounds
 
 
@@ -79,6 +80,11 @@ def _write_task(db, row, data, source, conversation_id, *, include_change=False)
         merged["due_date"] = None
     if data.get("due_date") and "due_at" not in data:
         merged["due_at"] = None
+    if "category" in data and "tags" not in data:
+        extra = (before or {}).get("tags", [])[1:]
+        name = data["category"]
+        if isinstance(name, str):
+            merged["tags"] = ([name.strip()] if name.strip() else []) + extra
     task = TaskInput.model_validate(merged)
     temporal = {"scheduled_date", "planned_start_at", "planned_end_at", "due_date", "due_at", "scheduled_period", "due_period", "planning_window", "window_start"}
     changed_time = any((before or {}).get(k) != merged.get(k) for k in temporal)
@@ -86,7 +92,10 @@ def _write_task(db, row, data, source, conversation_id, *, include_change=False)
     if task.project_id:
         active(db, Project, task.project_id)
     row.resources = links(db, Resource, task.resource_ids)
-    for key, value in task.model_dump(exclude={"resource_ids", "allow_due_conflict"}).items():
+    if before is None or "tags" in data or "category" in data:
+        row.tags = resolve_tags(db, task.tags)
+        task.category = row.tags[0].name if row.tags else ""
+    for key, value in task.model_dump(exclude={"tags", "resource_ids", "allow_due_conflict"}).items():
         setattr(row, key, value.isoformat(timespec="microseconds") if isinstance(value, datetime) else value)
     row.completed_at = (row.completed_at or now_iso()) if row.status == "done" else None
     db.add(row)
@@ -180,10 +189,12 @@ def list_tasks(db, *, view="all", q=None, project_id=None, status=None, priority
     if view not in views:
         raise DomainError(422, "task.unknown_view")
     stmt = select(Task).options(selectinload(Task.resources)).where(Task.deleted.is_(False), *views[view])
+    if category:
+        stmt = stmt.where(Task.tags.any(Tag.name_key == category.strip().casefold()))
     if q:
         stmt = stmt.where(or_(Task.title.contains(q, autoescape=True), Task.description.contains(q, autoescape=True)))
     for key, value in (("project_id", project_id), ("status", status), ("priority", priority),
-                       ("category", category), ("scheduled_date", scheduled_date), ("due_date", due_date)):
+                       ("scheduled_date", scheduled_date), ("due_date", due_date)):
         if value is not None:
             if key in {"scheduled_date", "due_date"} and isinstance(value, str):
                 try:
@@ -360,6 +371,9 @@ def undo(db, id, *, source="manual", conversation_id=None):
             if restore["project_id"]:
                 active(db, Project, restore["project_id"])
             row.resources = links(db, Resource, restore["resource_ids"])
+            names = restore.get("tags", [restore["category"]] if restore.get("category","").strip() else [])
+            row.tags = resolve_tags(db, names)
+            restore = {**restore, "category": row.tags[0].name if row.tags else ""}
         if model is Resource:
             row.projects = links(db, Project, restore["project_ids"])
             if restore["url"]:

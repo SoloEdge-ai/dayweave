@@ -56,6 +56,26 @@ def login(client, root):
     return secret
 
 
+def test_workspace_tag_selection_and_reuse(http):
+    client, root = http
+    login(client, root)
+    original = client.post("/api/tags", json={"name": " Design "}).json()
+    assert client.post("/api/tags", json={"name": "design"}).json() == original
+    assert client.post("/api/tags", json={"name": " "}).status_code == 422
+    task = client.post("/api/tasks", json={"title": "Review", "tags": ["Design", "iPad", "IPAD"]}).json()
+    assert task["tags"] == ["Design", "iPad"] and task["category"] == "Design"
+    assert [row["id"] for row in client.get("/api/tasks?category=ipad").json()] == [task["id"]]
+    url = f"/api/tasks/{task['id']}"
+    client.patch(url, json={"tags": []}).raise_for_status()
+    assert client.get(url).json()["tags"] == []
+    assert len(client.get("/api/tags").json()) == 2
+    change = client.get("/api/changes").json()[0]
+    assert client.post(f"/api/changes/{change['id']}/undo").json()["record"]["tags"] == task["tags"]
+    assert client.patch(url, json={"category": "Legacy"}).json()["tags"] == ["Legacy", "iPad"]
+    other = client.post("/api/workspaces", json={"name": "Other"}).json()
+    assert client.get("/api/tags", headers={"X-DayWeave-Workspace": other["id"]}).json() == []
+
+
 def test_unfinished_day_returns_to_backlog_with_calendar_history(http, monkeypatch):
     from datetime import date
     from app import services
@@ -386,7 +406,7 @@ def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http
             return [{"id": "fixture-model", "name": "Fixture", "default": True, "efforts": ["low"]}]
 
         def events(self, deadline):
-            text = json.dumps({"calls": [{"name": "create_task", "arguments": json.dumps({"title": "Draft from Codex"})}]})
+            text = json.dumps({"calls": [{"name": "create_task", "arguments": json.dumps({"title": "Draft from Codex", "tags": ["Design"]})}]})
             for value in (6, 10):
                 yield {"method": "thread/tokenUsage/updated", "params": {"turnId": "turn", "threadId": "t",
                        "tokenUsage": {"total": {"inputTokens": value, "outputTokens": 2, "totalTokens": value + 2}}}}
@@ -434,17 +454,21 @@ def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http
         refreshed = client.post("/api/ai/providers/codex/test", headers=scope).json()
         assert refreshed["models"] == ["fixture-model"] and refreshed["model"] == "fixture-model"
         assert not next(p for p in peer.get("/api/ai/providers", headers=scope).json() if p["id"] == "codex")["has_key"]
-        response = client.post("/api/ai/chat", headers=scope, json={"provider": "codex", "request_id": "codex-test-request", "content": "Create a task"})
+        response = client.post("/api/ai/chat", headers=scope, json={"provider": "codex", "request_id": "codex-test-request", "content": "Create a task tagged Design"})
         frames = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: {")]
         usage = [frame["usage"] for frame in frames if frame["type"] == "usage"][-1]
         assert usage == {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12, "partial": False}
         draft = next(frame for frame in frames if frame["type"] == "task_draft")
+        assert draft["drafts"][0]["task"]["tags"] == ["Design"]
+        assert client.get("/api/tags", headers=scope).json() == []
         url = f"/api/ai/confirmations/{draft['id']}"
         assert peer.get(url, headers=scope).status_code == 404
         assert client.get("/api/tasks", headers=scope).json() == []
-        edited = client.patch(url + "/draft", headers=scope, json={"version": draft["version"], "drafts": [{"index": 0, "task": {"title": "Edited Codex task"}}]})
+        edited = client.patch(url + "/draft", headers=scope, json={"version": draft["version"], "drafts": [{"index": 0, "task": {"title": "Edited Codex task", "tags": ["Review"]}}]})
         assert edited.status_code == 200 and client.get("/api/tasks", headers=scope).json() == []
         assert client.post(url, headers=scope, json={"approve": True, "version": edited.json()["version"]}).status_code == 200
-        assert [row["title"] for row in peer.get("/api/tasks", headers=scope).json()] == ["Edited Codex task"]
+        [shared_task] = peer.get("/api/tasks", headers=scope).json()
+        assert (shared_task["title"], shared_task["tags"]) == ("Edited Codex task", ["Review"])
+        assert [tag["name"] for tag in peer.get("/api/tags",headers=scope).json()] == ["Review"]
         assert client.post("/api/ai/codex/disconnect").status_code == 204
         assert client.get("/api/ai/codex/login", headers=scope).json() == {"state": "idle"}

@@ -9,6 +9,8 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import services
+from app.schemas import TagInput, TagNames
+from app.tags import create_tag, list_tags
 from app.time_rules import week_bounds
 from . import workspace_tools
 
@@ -21,6 +23,7 @@ class TaskFields(Params):
     title: str | None = Field(None, min_length=1, max_length=240)
     description: str | None = Field(None, max_length=4000)
     priority: Literal["low", "medium", "high"] | None = None
+    tags: TagNames | None = Field(None, description="Full set of workspace tag names. Preserve existing tags when adding one.")
     category: str | None = None
     project_id: int | None = Field(None, gt=0)
     estimated_minutes: int | None = Field(None, ge=1, le=10080)
@@ -71,6 +74,7 @@ class Schedule(Target):
 
 
 class Search(Params):
+    category: str | None = Field(None, description="Match any attached tag by name.")
     q: str | None = Field(None, max_length=200)
     view: Literal[
         "all", "inbox", "today", "tomorrow", "week", "next_week", "month", "upcoming", "completed"
@@ -117,6 +121,7 @@ class Watch(Resource):
     estimated_minutes: int | None = Field(None, gt=0, le=525600)
     priority: Literal["low", "medium", "high"] | None = None
     category: str | None = None
+    tags: TagNames | None = None
     task_description: str | None = None
     task_project_id: int | None = Field(None, gt=0)
 
@@ -143,6 +148,8 @@ DEFINITIONS = {
     "delete_task": (Target, "Propose deletion for explicit human review."),
     "list_tasks_by_date": (ByDate, "Query tasks scheduled on a local calendar day."),
     "create_project": (Project, "Create a project."),
+    "create_tag": (TagInput, "Create or reuse a tag in the current workspace."),
+    "list_tags": (Params, "List reusable tags in the current workspace."),
     "list_projects": (Params, "List local projects."),
     "create_resource": (Resource, "Save or reuse a URL without fetching its contents."),
     "search_resources": (ResourceSearch, "Find resources by keyword."),
@@ -168,6 +175,7 @@ READ = {
     "search_tasks",
     "list_tasks_by_date",
     "list_projects",
+    "list_tags",
     "search_resources",
     "generate_daily_plan",
 }
@@ -321,6 +329,7 @@ def brief(row):
         "name",
         "status",
         "category",
+        "tags",
         "pinned",
         "priority",
         "project_id",
@@ -403,6 +412,10 @@ def execute(db, name, raw, conversation_id, *, allow_conflict=False, today=None,
         day = date.fromisoformat(data["date"])
         plans = services.list_tasks(db, scheduled_date=day) + services.previous_day_plans(db, day, day)
         return [brief(r) for r in plans[:50]]
+    if name == "list_tags":
+        return list_tags(db)
+    if name == "create_tag":
+        return create_tag(db, TagInput.model_validate(data))
     if name == "list_projects":
         return [brief(r) for r in services.list_projects(db)[:50]]
     if name == "search_resources":

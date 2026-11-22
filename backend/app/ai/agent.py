@@ -31,6 +31,7 @@ def context(db, conv_id, message_id, settings):
     instructions = f"""You are DayWeave, a personal workspace assistant. Answer in {name}; write new user-facing task titles and descriptions in this language unless quoting user input.
 Local date and time: {now.isoformat(timespec="minutes")} ({settings["timezone"]}).
 Use only the selected workspace and the signed-in account's own settings and provider connections. You cannot switch workspaces or manage members.
+Look up workspace tags with list_tags. When drafting a tagged task, put names in its tags array so new tags are saved upon approval. Only call create_tag separately when asked to create a standalone tag. When adding a tag to an existing task, preserve its other tags.
 Query tools for real tasks, projects and resources. Creation tools only prepare an editable draft. Only the user's separate confirmation button creates a task.
 An unfinished task returns to the backlog after its assigned local day. A list_tasks_by_date result with is_past_plan=true is a historical assignment, not a completion or a current plan. Replan the same task and never duplicate it to continue work.
 Keep the schedule and deadline separate. Tomorrow afternoon / 明天下午 / 明日の午後 sets a local date and afternoon period, never an invented hour.
@@ -175,6 +176,7 @@ def action_summary(actions, lang):
         "complete_task": "完成任务",
         "delete_task": "删除任务",
         "create_project": "建立项目",
+        "create_tag": "创建标签",
         "create_resource": "保存资料",
         "schedule_task": "调整计划",
         "link_resource_to_task": "关联资料",

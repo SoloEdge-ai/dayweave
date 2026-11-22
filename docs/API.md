@@ -102,3 +102,9 @@ Each `usage` event is a cumulative snapshot for this user turn. Read `usage.tota
 1. A `task_draft` event contains a proposal `id`, `version`, `status`, `conflict` flag and a `drafts` array. Each item supplies the original `index`, proposed `task` fields and optional `resource` metadata. The task and any proposed new resource are still pending.
 2. To edit the first item in version 1, send `{"version":1,"drafts":[{"index":0,"task":{"title":"Prepare notes","estimated_minutes":45}}]}` to `PATCH /api/ai/confirmations/{id}/draft`. Use the revision returned by the server for the next request. A stale revision returns HTTP 409. The edited card is persisted in the transcript.
 3. To create the task, post `{"approve":true,"version":2}` with the actual current revision. If the reviewed schedule conflicts with its deadline, the user can explicitly set `allow_due_conflict:true`. To cancel, send `{"approve":false,"version":2}`. The response contains `status`, `result` and the updated `event`. Approved items include their saved `task_id`; the task list is unchanged after cancellation.
+
+### Workspace tags
+
+`GET /api/tags` lists the workspace catalog. `POST /api/tags` accepts `{"name":"Design"}` and returns the existing or newly created tag with its ID. Names are trimmed and compared case-insensitively. Workspaces maintain independent catalogs.
+
+Task writes accept `tags` as an array of names. An explicit array replaces the selection, including an empty array to clear it. The legacy `category` field exposes the first tag. Use `GET /api/tasks?category=Design` to match any attached tag. Draft edits stage new names until confirmation. The assistant can also create or list standalone tags.

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Inbox, Pencil, Undo2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { api, dateInZone, dateLabel, errorText, periodLabels, timeLabel, useApi, type Dashboard, type Task } from './api'
+import { api, dateInZone, dateLabel, errorText, periodLabels, timeLabel, taskTags, useApi, type Dashboard, type Task } from './api'
 import { localInput, toIso } from './datetime'
 import { WeekStrip, shift, monday, weekday } from './week-strip'
 import { Heading } from './pages'
@@ -238,8 +238,9 @@ export function PlannerPage() {
     if (armed) setEditor({ task: armed, target: { date } })
   }
   function row(task: Task) {
+    const tags = taskTags(task)
     const details = <><strong>{task.title}</strong>
-      {(task.category || task.estimated_minutes) && <small>{[task.category,
+      {(tags.length > 0 || !!task.estimated_minutes) && <small>{[...tags,
         task.estimated_minutes ? task.estimated_minutes + ' ' + '分钟' : null].filter(Boolean).join(' · ')}</small>}
     </>
     return <li key={task.id} className={['planner-agenda-row', task.is_past_plan ? 'past-plan' : task.status, highlighted === task.id ? 'highlighted' : ''].join(' ')}>

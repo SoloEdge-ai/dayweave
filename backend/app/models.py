@@ -56,6 +56,20 @@ class Resource(Record, Base):
     projects: Mapped[list[Project]] = relationship(secondary=resource_projects, order_by=Project.id)
 
 
+class Tag(Base):
+    __tablename__ = "tags"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(300))
+    name_key: Mapped[str] = mapped_column(String, unique=True)
+
+
+task_tags = Table(
+    "task_tags", Base.metadata,
+    Column("task_id", ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True, index=True),
+)
+
+
 class Task(Record, Base):
     __tablename__ = "tasks"
     title: Mapped[str] = mapped_column(String(500))
@@ -76,6 +90,7 @@ class Task(Record, Base):
     due_at: Mapped[str | None] = mapped_column(String, index=True)
     completed_at: Mapped[str | None] = mapped_column(String)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    tags: Mapped[list[Tag]] = relationship(secondary=task_tags, order_by=Tag.id, lazy="selectin")
     resources: Mapped[list[Resource]] = relationship(secondary=task_resources, order_by=Resource.id)
 
 

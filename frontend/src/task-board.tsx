@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { CalendarDays, Check, CheckSquare2, Flag, Plus, X } from 'lucide-react'
-import { api, dateLabel, errorText, priorityLabels, statusLabels, type Task } from './api'
+import { api, dateLabel, errorText, priorityLabels, statusLabels, taskTags, type Task } from './api'
 import { ErrorBox, useWorkspace } from './ui'
 
 import { PaneGrip, useContainerWidth, useLayout, usePane, type Pane } from './pane-layout'
@@ -65,8 +65,8 @@ export function TaskBoard({ items, defaults, status, view }: {
           const project = projects.find(row => row.id === task.project_id)
           return <li key={task.id}><button type="button" className="board-card" onClick={() => edit({kind:'task', task})}>
             <strong>{task.title}</strong>
-            {(project || task.category) && <span className="board-tags">
-              {project && <span>{project.name}</span>}{task.category && <span>{task.category}</span>}
+            {(project || taskTags(task).length > 0) && <span className="board-tags">
+              {project && <span>{project.name}</span>}{taskTags(task).map(tag => <span key={tag}>{tag}</span>)}
             </span>}
             <span className="board-card-foot">
               <CheckSquare2 size={14} /><span>#{task.id}</span>

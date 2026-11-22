@@ -16,6 +16,7 @@ STRINGS = {
     "修改任务": ("Update task", "タスクを更新"),
     "完成任务": ("Complete task", "タスクを完了"),
     "删除任务": ("Delete task", "タスクを削除"),
+    "创建标签": ("Create tag", "タグを作成"),
     "建立项目": ("Create project", "プロジェクトを作成"),
     "保存资料": ("Save resource", "資料を保存"),
     "调整计划": ("Reschedule task", "予定を変更"),

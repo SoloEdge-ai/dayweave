@@ -21,6 +21,10 @@ export function workspaceHeaders(account = activeAccount, workspace = activeWork
 export function workspaceLink(path: string) {
   return activeWorkspace ? path + (path.includes('?') ? '&' : '?') + 'workspace=' + encodeURIComponent(activeWorkspace) : path
 }
+export type Tag = { id: Id; name: string }
+export function taskTags(task: { tags?: string[]; category?: string | null }): string[] {
+  return task.tags ?? (task.category?.trim() ? [task.category.trim()] : [])
+}
 export type Task = {
   id: Id
   title: string
@@ -28,6 +32,7 @@ export type Task = {
   status: string
   priority: string
   project_id: Id | null
+  tags?: string[]
   category: string | null
   estimated_minutes: number | null
   scheduled_date: string | null

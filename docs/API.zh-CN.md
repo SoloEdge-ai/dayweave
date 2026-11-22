@@ -102,3 +102,9 @@ sequenceDiagram
 1. `task_draft` 事件包含提案 `id`、`version`、`status`、`conflict` 标记和 `drafts` 数组。每项包含原始 `index`、拟创建任务的 `task` 字段和可选的 `resource` 元数据。此时任务和拟新增的资料都处于待确认状态。
 2. 编辑版本 1 的第一项时，向 `PATCH /api/ai/confirmations/{id}/draft` 发送 `{"version":1,"drafts":[{"index":0,"task":{"title":"整理笔记","estimated_minutes":45}}]}`。下一次请求使用服务端返回的版本。过期版本返回 HTTP 409。修改后的卡片会同步保存到聊天记录。
 3. 创建任务时提交 `{"approve":true,"version":2}`，其中版本替换为实际的最新值。计划与截止要求冲突时，用户可明确设置 `allow_due_conflict:true`。取消则提交 `{"approve":false,"version":2}`。返回对象包含 `status`、`result` 和更新后的 `event`。已创建条目带有实际的 `task_id`；取消后任务列表保留原状。
+
+### 工作区标签
+
+`GET /api/tags` 列出工作区标签。`POST /api/tags` 接受 `{"name":"设计"}`，返回已有或新建标签及其 ID。名称会去掉首尾空格，匹配时忽略大小写。各工作区分别保存自己的标签。
+
+任务可以通过 `tags` 字符串数组设置多个标签，空数组清空选择。旧版 `category` 字段对应首个标签。`GET /api/tasks?category=设计` 匹配包含此标签的所有任务。草稿中的新标签会在确认创建时保存。助手也可以单独创建或列出标签。

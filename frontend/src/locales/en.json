@@ -482,5 +482,11 @@
   "安排过": "Previously planned",
   "当天未完成的任务会回到待安排。": "Unfinished tasks return to the backlog after this day.",
   "已回到待安排": "Returned to backlog",
-  "日历": "Calendar"
+  "日历": "Calendar",
+  "标签": "Tags",
+  "选择标签": "Choose a tag",
+  "＋ 新建标签": "＋ New tag",
+  "新标签名称": "New tag name",
+  "取消新建标签": "Cancel new tag",
+  "移除标签": "Remove tag"
 }

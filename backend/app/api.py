@@ -10,7 +10,8 @@ from .auth import require_admin
 from .db import get_db
 from .models import Project, Resource, Task, TaskChangeLog, now_iso
 from .records import columns
-from .schemas import SchedulePatch
+from .schemas import SchedulePatch, TagInput
+from .tags import list_tags, create_tag
 from .uploads import open_file, store_upload
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
@@ -19,6 +20,16 @@ router = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
 def commit(db, value):
     db.commit()
     return value
+
+
+@router.get("/tags")
+def tags(db: Session = Depends(get_db)):
+    return list_tags(db)
+
+
+@router.post("/tags")
+def add_tag(data: TagInput, db: Session = Depends(get_db)):
+    return commit(db, create_tag(db, data))
 
 
 @router.get("/tasks")
@@ -159,7 +170,7 @@ def undo(id: int, db: Session = Depends(get_db)):
 def export(db: Session = Depends(get_db)):
     from .ai.models import Conversation, Message
     return {"schema_version": 1, "exported_at": now_iso(), "settings": services.get_settings(db),
-            "tasks": services.list_tasks(db), "projects": services.list_projects(db),
+            "tags": list_tags(db), "tasks": services.list_tasks(db), "projects": services.list_projects(db),
             "resources": services.list_resources(db),
             "conversations": [columns(r, exclude={"account_id"}) for r in db.scalars(select(Conversation).order_by(Conversation.id))],
             "messages": [columns(r, exclude={"tools", "account_id"}) for r in db.scalars(select(Message).order_by(Message.id))],

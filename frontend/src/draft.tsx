@@ -9,8 +9,9 @@ import {
   LoaderCircle,
   PencilLine,
 } from 'lucide-react'
+import { TagPicker } from './tag-picker'
 import { PlanDatePicker } from './plan-date'
-import { api, dateLabel, errorText, periodLabels, priorityLabels, type Task } from './api'
+import { api, dateLabel, errorText, periodLabels, priorityLabels, taskTags, type Task } from './api'
 import { ErrorBox, Field, useWorkspace } from './ui'
 import { localInput, toIso } from './datetime'
 
@@ -31,6 +32,7 @@ export type DraftFields = Pick<
   | 'priority'
   | 'project_id'
   | 'category'
+  | 'tags'
 >
 type DraftRow = {
   index: number
@@ -393,6 +395,7 @@ export function TaskDraftCard({
                   {localInput(t.planned_end_at, zone).replace('T', ' ')}
                 </small>
               )}
+              {taskTags(t).length > 0 && <small>{taskTags(t).join(' · ')}</small>}
               {t.project_id && <small>{projects.find(p => p.id === t.project_id)?.name}</small>}
               {t.due_date && <small>{'截止日期'} · {dateLabel(t.due_date)} {periodLabels[t.due_period ?? '']}</small>}
               {t.due_at && (
@@ -534,6 +537,7 @@ export function TaskDraftCard({
                 <ArrowRight size={13} />
               </a>
             )}
+            <TagPicker selected={taskTags(t)} change={tags => change({ tags })} />
             <details className="wide" open={hasExact || undefined}>
               <summary>
                 更多选项
@@ -549,13 +553,7 @@ export function TaskDraftCard({
                 <Field label="精确截止时刻" wide>
                   {momentInput(row, 'due_at')}
                 </Field>
-                <Field label="分类">
-                  <input
-                    value={t.category ?? ''}
-                    maxLength={300}
-                    onChange={(e) => change({ category: e.target.value })}
-                  />
-                </Field>
+
                 <Field label="备注" wide>
                   <textarea
                     rows={2}

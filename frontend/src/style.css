@@ -2046,3 +2046,14 @@ kbd {
 .language-picker { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .language-picker select { color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px; min-height: 44px; }
 html:lang(en) .account strong, html:lang(ja) .account strong { white-space: normal; }
+
+.tag-picker { min-width: 0; display: grid; gap: 6px; align-content: start; }
+.tag-create { display: flex; align-items: center; gap: 6px; }
+.tag-create input { min-width: 0; flex: 1; }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.tag-chip { display: inline-flex; gap: 6px; align-items: center; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; background: var(--panel); color: var(--ink); }
+.tag-chip span { overflow-wrap: anywhere; }
+.tag-chip svg { flex-shrink: 0; color: var(--muted); }
+@media (pointer: coarse) {
+  .tag-picker select, .tag-create button, .tag-chip { min-height: 44px; }
+}

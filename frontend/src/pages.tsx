@@ -46,6 +46,8 @@ import {
   useApi,
   viewLabels,
   type Dashboard,
+  type Tag,
+  taskTags,
   type Project,
   type Resource,
   type Task,
@@ -201,12 +203,9 @@ export function TaskRow({
               {project.name}
             </span>
           )}
-          {t.category && (
-            <span>
-              <i className="category-dot" />
-              {t.category}
-            </span>
-          )}
+          {taskTags(t).map(tag => (
+            <span key={tag}><i className="category-dot" />{tag}</span>
+          ))}
           {time && (
             <span>
               <Clock3 size={12} />
@@ -395,6 +394,7 @@ export function TasksPage({ boardDefault = false }: { boardDefault?: boolean }) 
     { edit, projects, settings } = useWorkspace(),
     [params, setParams] = useSearchParams(),
     [filters, setFilters] = useState(false)
+  const tagCatalog = useApi<Tag[]>('/tags', filters)
   const apiParams = new URLSearchParams(params)
   const board = params.has('layout') ? params.get('layout') === 'board' : boardDefault
   apiParams.delete('layout')
@@ -480,6 +480,7 @@ export function TasksPage({ boardDefault = false }: { boardDefault?: boolean }) 
             [
               ['priority', '优先级', priorityLabels],
               ['status', '状态', statusLabels],
+              ['category', '标签', Object.fromEntries((tagCatalog.data ?? []).map(tag => [tag.name, tag.name]))],
               [
                 'project_id',
                 '项目',
@@ -504,7 +505,6 @@ export function TasksPage({ boardDefault = false }: { boardDefault?: boolean }) 
           ))}
           {(
             [
-              ['category', '分类', 'text'],
               ['scheduled_date', '计划日期', 'date'],
               ['due_date', '截止日期', 'date'],
             ] as const
