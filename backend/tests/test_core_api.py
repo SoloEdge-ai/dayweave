@@ -14,7 +14,14 @@ PASSWORD = "disposable-test-password"
 def http(tmp_path, monkeypatch):
     from app import auth, db, main
     monkeypatch.setenv("DAYWEAVE_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("DAYWEAVE_ADMIN_PASSWORD", PASSWORD)
+    from app.email_codes import MailServer
+    monkeypatch.setenv("DAYWEAVE_MAIL_FROM", "sender@example.org")
+    monkeypatch.setenv("DAYWEAVE_SMTP_HOST", "localhost")
+    monkeypatch.setenv("DAYWEAVE_SMTP_SECURITY", "starttls")
+    monkeypatch.setattr(auth, "_attempts", {})
+    def capture(server, recipient, purpose, code, language):
+        (tmp_path / (recipient + "." + purpose)).write_text(code)
+    monkeypatch.setattr(MailServer, "send", capture)
     engine = create_engine(db.sqlite_url(), connect_args={"check_same_thread": False})
     event.listen(engine, "connect", db.configure_sqlite)
     sessions = sessionmaker(engine, expire_on_commit=False)
@@ -25,9 +32,19 @@ def http(tmp_path, monkeypatch):
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     command.upgrade(config, "head")
     command.upgrade(config, "head")
+    with sessions.begin() as db_session:
+        auth.add_account(db_session, "admin", "admin@example.org", PASSWORD)
     with TestClient(main.app) as client:
         yield client, tmp_path
     engine.dispose()
+
+
+def register(client, root, username, password):
+    email = username.lower() + "@example.org"
+    response = client.post("/api/auth/email-code", json={"email": email, "purpose": "register"})
+    assert response.status_code == 202
+    code = (root / (email + ".register")).read_text()
+    return client.post("/api/auth/register", json={"email": email, "code": code, "username": username, "password": password})
 
 
 def login(client, root):
@@ -104,7 +121,7 @@ def test_http_access_export_and_rollback(http):
 def test_accounts_isolate_records_files_settings_and_session_identity(http):
     from app.main import app
     first, root = http
-    identity = first.post("/api/auth/register", json={"username": "Alice", "password": "password-for-alice"}).json()["account"]
+    identity = register(first, root, "Alice", "password-for-alice").json()["account"]
     assert identity["username"] == "alice"
     assert first.post("/api/tasks", json={"title": "Alice only"}).status_code == 201
     assert first.post("/api/projects", json={"name": "Alice project"}).status_code == 201
@@ -114,7 +131,7 @@ def test_accounts_isolate_records_files_settings_and_session_identity(http):
 
     with TestClient(app) as second:
         assert second.get("/api/tasks").status_code == 401
-        response = second.post("/api/auth/register", json={"username": "bob", "password": "password-for-bob"})
+        response = register(second, root, "bob", "password-for-bob")
         assert response.status_code == 201, response.text
         assert response.json()["account"]["id"] != identity["id"]
         for path in ("/api/tasks", "/api/projects", "/api/resources", "/api/changes", "/api/ai/conversations"):
@@ -148,8 +165,8 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
         return httpx.Response(200, text="data: " + json.dumps({"choices": [choice]}) + "\n\ndata: [DONE]\n\n")
 
     monkeypatch.setattr(Adapter, "client", lambda self: httpx.Client(transport=httpx.MockTransport(simulate)))
-    alice, _ = http
-    assert alice.post("/api/auth/register", json={"username": "alice", "password": "alice-password-22"}).status_code == 201
+    alice, root = http
+    assert register(alice, root, "alice", "alice-password-22").status_code == 201
     personal = alice.get("/api/workspaces").json()[0]
     shared = alice.post("/api/workspaces", json={"name": "Shared work"}).json()
     assert len(alice.get("/api/workspaces").json()) == 2
@@ -160,7 +177,7 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
         "api_key": "alice-profile-token", "base_url": "https://fixture.example/v1", "model": "shared-fixture",
     }).status_code == 200
     with TestClient(app) as bob:
-        actor = bob.post("/api/auth/register", json={"username": "bob", "password": "bob-password-111"}).json()["account"]
+        actor = register(bob, root, "bob", "bob-password-111").json()["account"]
         assert bob.get("/api/tasks", headers=view).status_code == 401
         assert alice.post(f"/api/workspaces/{shared['id']}/members", json={"username": "bob"}).status_code == 201
         assert bob.get("/api/tasks", headers=view).json()[0]["title"] == "Shared task"
@@ -251,3 +268,39 @@ def test_language_negotiation_persistence_and_localized_errors(http):
     assert conflict.json()["code"] == "time.due_conflict" and "期限" in conflict.json()["detail"]
     item = client.get(f"/api/tasks/{tid}").json()
     assert item["title"] == original_title and item["status"] == "todo"
+
+def test_email_ownership_and_password_recovery(http, monkeypatch):
+    from app import email_codes
+    from app.main import app
+    client, root = http
+    email = "owner@example.org"
+    credentials = {"email": email.upper(), "username": "owner", "password": PASSWORD}
+    assert client.post("/api/auth/register", json=credentials).status_code == 422
+    request = {"email": email, "purpose": "register"}
+    assert client.post("/api/auth/email-code", json=request).json() == {"accepted": True}
+    register_code = (root / (email + ".register")).read_text()
+    assert client.post("/api/auth/email-code", json=request).status_code == 202
+    assert (root / (email + ".register")).read_text() == register_code
+    wrong = ("0" if register_code[0] != "0" else "1") + register_code[1:]
+    assert client.post("/api/auth/register", json={**credentials, "code": wrong}).status_code == 400
+    assert client.post("/api/auth/register", json={**credentials, "code": register_code}).json()["account"]["email"] == email
+    assert client.post("/api/auth/register", json={**credentials, "code": register_code}).status_code == 400
+    task = client.post("/api/tasks", json={"title": "Retained after recovery"}).json()
+    with TestClient(app) as visitor:
+        unknown = visitor.post("/api/auth/email-code", json={"email": "unknown@example.org", "purpose": "reset"})
+        known = visitor.post("/api/auth/email-code", json={"email": email, "purpose": "reset"})
+        assert unknown.status_code == known.status_code == 202 and unknown.json() == known.json()
+        assert not (root / "unknown@example.org.reset").exists()
+        reset_code = (root / (email + ".reset")).read_text()
+        reset = {"email": email.upper(), "password": "replacement-test-secret", "code": reset_code}
+        assert visitor.post("/api/auth/reset-password", json=reset).status_code == 204
+        assert visitor.post("/api/auth/reset-password", json=reset).status_code == 400
+        assert client.get("/api/tasks").status_code == 401
+        assert visitor.get("/api/tasks").status_code == 401
+        assert visitor.post("/api/auth/login", json={"username": email, "password": PASSWORD}).status_code == 401
+        assert visitor.post("/api/auth/login", json={"username": email, "password": reset["password"]}).status_code == 200
+        assert visitor.get("/api/tasks").json()[0]["id"] == task["id"]
+        visitor.post("/api/auth/email-code", json={"email": email, "purpose": "reset"})
+        reset["code"] = (root / (email + ".reset")).read_text()
+        monkeypatch.setattr(email_codes, "TTL", 0)
+        assert visitor.post("/api/auth/reset-password", json=reset).status_code == 400

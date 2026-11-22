@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { I18nextProvider, useTranslation } from 'react-i18next'
-import { i18n, languageChoices, setLanguage } from './i18n'
+import { i18n, setLanguage } from './i18n'
 import {
   QueryClient,
   QueryClientProvider,
@@ -19,7 +19,6 @@ import {
 } from 'react-router-dom'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
-  ArrowRight,
   BookOpen,
   CalendarDays,
   CalendarRange,
@@ -53,6 +52,7 @@ import {
   type Account,
   type WorkspaceInfo,
 } from './api'
+import { Login } from './access'
 import { Chat } from './chat'
 import { Editors } from './editors'
 import { HomePage, LibraryPage, ProjectsPage, TasksPage } from './pages'
@@ -69,6 +69,7 @@ import {
   type EditorState,
 } from './ui'
 import './style.css'
+import './workspace.css'
 
 const client = new QueryClient({
   defaultOptions: {
@@ -85,96 +86,6 @@ function useMedia(query: string) {
     return () => media.removeEventListener('change', update)
   }, [query])
   return matches
-}
-function Login({ done, signupEnabled }: { done: (status: Access) => void; signupEnabled: boolean }) {
-  const pendingLanguageKey = 'dayweave.login-language'
-  const [password, setPassword] = useState(''),
-    [username, setUsername] = useState(''),
-    [signup, setSignup] = useState(false),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false)
-  return (
-    <div className="login-shell">
-      <div className="login-top"><Brand />
-        <label className="language-picker"><span>界面语言</span>
-          <select lang={i18n.language} value={i18n.language} onChange={e => {
-            sessionStorage.setItem(pendingLanguageKey, e.target.value)
-            setLanguage(e.target.value)
-          }}>{languageChoices.map(lang => <option key={lang.code} value={lang.code} lang={lang.code}>{lang.name}</option>)}</select>
-        </label>
-      </div>
-      <div className="login-card">
-        <div className="login-motif" aria-hidden="true">
-          {Array.from({ length: 22 }, (_, i) => (
-            <i
-              key={i}
-              style={{
-                width: 140 + i * 14 + 'px',
-                height: 150 + i * 14 + 'px',
-                top: -70 - i * 3 + 'px',
-                right: 5 + i * 3 + 'px',
-              }}
-            />
-          ))}
-        </div>
-        <div className="login-body">
-          <div className="date-line">
-            <span className="date-rule" />
-            个人工作区
-          </div>
-          <h1>{signup ? '创建账号' : '欢迎回到织日'}</h1>
-          <p>{signup ? '每个账号拥有独立的工作区。' : '登录以查看今天的任务、项目与资料。'}</p>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault()
-              setError('')
-              setBusy(true)
-              try {
-                const status = await api<Access>(signup ? '/auth/register' : '/auth/login', 'POST', { username, password })
-                const explicitLanguage = sessionStorage.getItem(pendingLanguageKey)
-                if (explicitLanguage) {
-                  await api('/settings', 'PATCH', { language: explicitLanguage })
-                  sessionStorage.removeItem(pendingLanguageKey)
-                }
-                done(status)
-              } catch (e) {
-                setError(errorText(e))
-              } finally {
-                setBusy(false)
-              }
-            }}
-          >
-            <label className="field">
-              <span>用户名</span>
-              <input value={username} autoComplete="username" autoCapitalize="none" spellCheck={false}
-                required minLength={3} maxLength={48} onChange={e => setUsername(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>密码</span>
-              <input
-                value={password}
-                type="password"
-                autoComplete={signup ? 'new-password' : 'current-password'}
-                minLength={signup ? 10 : undefined}
-                required
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            {error && <ErrorBox message={error} />}
-            <button className="primary" disabled={busy}>
-              {busy ? '正在登录…' : signup ? '注册并登录' : '进入工作区'}
-              <ArrowRight size={16} />
-            </button>
-          </form>
-          {signupEnabled && <button type="button" className="text-button" disabled={busy} onClick={() => {
-            setSignup(!signup)
-            setPassword('')
-            setError('')
-          }}>{signup ? '返回登录' : '创建账号'}</button>}
-        </div>
-      </div>
-    </div>
-  )
 }
 const navEntries = (): [string, string, LucideIcon][] => [
   ['/', '今日总览', LayoutDashboard],
@@ -194,7 +105,7 @@ const extraEntries = (): [string, string, LucideIcon][] => [
   ['/history', '变更记录', History],
   ['/settings', '设置', SlidersHorizontal],
 ]
-function SideNav({ close, logout, account }: { close: () => void; logout: () => void; account: Account }) {
+function SideNav({ close, logout, account }: { close: () => void; logout: () => void; account: Account & { email: string } }) {
   const links = (items: [string, string, LucideIcon][]) =>
     items.map(([url, label, Icon]) => (
       <NavLink
@@ -222,10 +133,10 @@ function SideNav({ close, logout, account }: { close: () => void; logout: () => 
       <div className="nav-bottom">
         {links(extraEntries())}
         <div className="account">
-          <span className="avatar">织</span>
+          <span className="avatar" aria-hidden="true">{account.username.slice(0, 1).toUpperCase()}</span>
           <div>
-            <strong>个人工作区</strong>
-            <small>{account.username}</small>
+            <strong>{account.username}</strong>
+            <small title={account.email}>{account.email}</small>
           </div>
           <IconButton icon={LogOut} label="退出登录" onClick={logout} />
         </div>
@@ -234,7 +145,7 @@ function SideNav({ close, logout, account }: { close: () => void; logout: () => 
   )
 }
 function Shell({ logout, account, workspace, switcher }: {
-  logout: () => void; account: Account; workspace: WorkspaceInfo; switcher: ReactNode
+  logout: () => void; account: Account & { email: string }; workspace: WorkspaceInfo; switcher: ReactNode
 }) {
   const loc = useLocation(),
     nav = useNavigate(),
@@ -243,7 +154,7 @@ function Shell({ logout, account, workspace, switcher }: {
     projects = useApi<Project[]>('/projects'),
     resources = useApi<Resource[]>('/resources')
   const large = useMedia('(min-width: 1260px)'),
-    mobileNav = useMedia('(max-width: 899px)'),
+    mobileNav = useMedia('(max-width: 899px)') || (loc.pathname === '/planner' && !large),
     dark = useMedia('(prefers-color-scheme: dark)')
   const [navOpen, setNavOpen] = useState(false),
     [aiOpen, setAiOpen] = useState(
@@ -329,7 +240,7 @@ function Shell({ logout, account, workspace, switcher }: {
       <a className="skip-link" href="#main-content">
         跳到主要内容
       </a>
-      <div className={'shell ' + (showAi && dockAssistant ? 'with-ai' : '')}>
+      <div className={'shell ' + (showAi && dockAssistant ? 'with-ai' : planner && mobileNav ? 'planning-tablet' : '')}>
         {!mobileNav && (
           <SideNav close={() => setNavOpen(false)} logout={logout} account={account} />
         )}

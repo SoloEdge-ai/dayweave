@@ -19,7 +19,7 @@ if not (ROOT / "frontend/dist/index.html").exists():
 
 def run(directory):
     os.environ["DAYWEAVE_DATA_DIR"] = directory
-    os.environ["DAYWEAVE_ADMIN_PASSWORD"] = secrets.token_urlsafe(24)
+    password = secrets.token_urlsafe(24)
     os.environ["DAYWEAVE_STATIC_DIR"] = str(ROOT / "frontend/dist")
     os.environ["DAYWEAVE_COOKIE_SECURE"] = "0"
     os.chdir(ROOT / "backend")
@@ -79,8 +79,12 @@ def run(directory):
     Adapter.client = lambda self: httpx.Client(transport=httpx.MockTransport(simulate))
     command.upgrade(Config("alembic.ini"), "head")
     from app.main import app
+    from app.auth import add_account
+    from app.db import SessionLocal
+    with SessionLocal.begin() as db:
+        add_account(db, "admin", "admin@example.org", password)
     output = Path(directory) / "browser-access.json"
-    output.write_text(json.dumps({"password": os.environ["DAYWEAVE_ADMIN_PASSWORD"]}), encoding="utf-8")
+    output.write_text(json.dumps({"password": password, "mailbox": str(Path(directory) / "mail.jsonl")}), encoding="utf-8")
     print(f"DAYWEAVE_FIXTURE={output}", flush=True)
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=args.port, access_log=False, log_level="warning"))
     def stop_on_parent_exit():
@@ -95,5 +99,6 @@ def run(directory):
 
 
 if __name__ == "__main__":
-    with tempfile.TemporaryDirectory(prefix="dayweave-browser-") as fixture:
+    from mailbox_fixture import mailbox
+    with tempfile.TemporaryDirectory(prefix="dayweave-browser-") as fixture, mailbox(fixture):
         run(fixture)

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { UsersRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api, errorText, setActiveWorkspace, useApi, type Account, type WorkspaceInfo } from './api'
 import { ErrorBox, Field, Loading, Modal } from './ui'
@@ -32,7 +33,7 @@ export function WorkspaceChooser({ account, children }: {
       <select aria-label="切换工作区" value={selected.id} onChange={e => switchTo(e.target.value)}>
         {available.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
       </select>
-      <button className="secondary" onClick={() => setEditing(true)}>管理工作区</button>
+      <button className="secondary manage-workspace" aria-label="管理工作区" onClick={() => setEditing(true)}><UsersRound size={16} /><span>管理工作区</span></button>
     </div>)}
     {editing && <WorkspaceEditor selected={selected} close={() => setEditing(false)}
       created={id => { switchTo(id); setEditing(false) }} />}

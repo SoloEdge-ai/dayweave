@@ -17,6 +17,7 @@ import {
   workspaceLink,
   modelLabel,
   useApi,
+  type Access,
   type Change,
   type Provider,
   type ModelCatalog,
@@ -35,6 +36,7 @@ const states: Record<string, string> = {
 }
 export function General({ settings: s }: { settings: Settings }) {
   const { refresh, notify } = useWorkspace(),
+    access = useApi<Access>('/auth/status'),
     [v, set] = useState({ ...s }),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
@@ -61,6 +63,9 @@ export function General({ settings: s }: { settings: Settings }) {
         }
       }}
     >
+      {access.data?.account && <div className="account-identity">
+        <span>已验证邮箱</span><strong>{access.data.account.email}</strong>
+      </div>}
       <h2>工作区偏好</h2>
       <div className="form-grid">
         <Field label="时区">

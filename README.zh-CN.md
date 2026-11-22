@@ -10,9 +10,14 @@
 
 ```sh
 cp .env.example .env
+vi .env  # 配置 SMTP 和发件地址
 docker compose up -d --build
 docker compose ps
 ```
+
+在服务器私有配置中填写 `DAYWEAVE_SMTP_HOST`、`DAYWEAVE_SMTP_PORT`、`DAYWEAVE_SMTP_SECURITY`（`starttls` 或 `tls`）、`DAYWEAVE_MAIL_FROM`。需要认证的服务还需填写 `DAYWEAVE_SMTP_USER` 和 `DAYWEAVE_SMTP_PASSWORD`，部分邮箱要求使用客户端授权码。注册时填写用户名、密码、邮箱及发到该邮箱的八位验证码。登录支持用户名或邮箱。在“忘记密码？”中验证注册邮箱后即可重设密码，所有现有登录会话同时失效。
+
+本次开发版本从带有早期账号的安装升级时使用新的数据卷。请在启动前让 Compose 指向新卷。升级过程会在变更账号表前检测已有的非空账号库。
 
 在服务器上打开 [DayWeave 本机入口](http://127.0.0.1:8787)，选择**创建账号**。注册时会生成一个个人工作区。在**管理工作区**可以新建工作区，或按用户名添加已注册账号。服务商凭据和模型配置随登录账号使用。所需账号注册后，可设 `DAYWEAVE_ENABLE_SIGNUP=0` 关闭注册。
 
@@ -103,3 +108,5 @@ npm run preview
 * [REST API 与聊天事件](docs/API.zh-CN.md)
 * [AI 服务商配置与官方授权](docs/AI_PROVIDERS.zh-CN.md)
 * [交付状态与后续计划](docs/ROADMAP.zh-CN.md)
+
+* [iPad 界面调研与Playwright 截图](docs/INTERFACE_RESEARCH.zh-CN.md)

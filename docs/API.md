@@ -30,9 +30,11 @@ sequenceDiagram
 | Method and path | Behavior |
 | --- | --- |
 | `GET /api/health` | Verify that the service can query the migrated database |
-| `GET /api/auth/status` | Read `authenticated`, `signup_enabled` and the signed-in account's public ID and username |
-| `POST /api/auth/register` | Create a private workspace and sign in with a username and password where registration is enabled |
-| `POST /api/auth/login`, `POST /api/auth/logout` | Start a session with a username and password or invalidate the current session |
+| `GET /api/auth/status` | Read `authenticated`, `signup_enabled` and the signed-in account's ID, username and verified email |
+| `POST /api/auth/email-code` | Send `email` and `purpose` (`register` or `reset`). An accepted request returns 202 with the same body for existing and unknown addresses. |
+| `POST /api/auth/register` | Send `username`, `email`, `password` (10 or more characters), and the emailed `code` as an eight-digit string. Creates the account, personal workspace and session. |
+| `POST /api/auth/reset-password` | Send `email`, the reset `code` and a new `password`. Success returns 204 and revokes all sessions for that account. |
+| `POST /api/auth/login`, `POST /api/auth/logout` | Sign in by passing a username or email in `username` with the password, or invalidate the current session. |
 | `GET, POST /api/workspaces` | List accessible workspaces or create another workspace |
 | `GET, POST /api/workspaces/{id}/members` | As owner, list members or add an existing username |
 | `DELETE /api/workspaces/{id}/members/{account_id}` | As owner, remove a member |

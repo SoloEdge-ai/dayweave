@@ -25,10 +25,19 @@ export async function fixture() {
   try {
     for await (const line of lines) {
       if (!line.startsWith('DAYWEAVE_FIXTURE=')) continue
-      const { password } = JSON.parse(await readFile(line.slice('DAYWEAVE_FIXTURE='.length), 'utf8'))
+      const { password, mailbox } = JSON.parse(await readFile(line.slice('DAYWEAVE_FIXTURE='.length), 'utf8'))
       for (let i = 0; i < 100; i++) {
         if ((await fetch(url + '/api/health').catch(() => null))?.ok) {
-          return { url, password, stop }
+          async function receivedCodes(recipient, count) {
+            for (let poll = 0; poll < 100; poll++) {
+              const messages = (await readFile(mailbox, 'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse)
+              const codes = messages.filter(mail => mail.to === recipient).map(mail => mail.body.match(/\b[0-9]{8}\b/u)?.[0])
+              if (codes.length >= count && codes[count - 1]) return codes[count - 1]
+              await delay(100)
+            }
+            throw new Error('Expected email did not reach the fixture mailbox.')
+          }
+          return { url, password, stop, receivedCodes }
         }
         await delay(100)
       }

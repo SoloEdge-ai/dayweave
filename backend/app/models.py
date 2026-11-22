@@ -116,6 +116,7 @@ class Account(Base):
     __tablename__ = "accounts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     username: Mapped[str] = mapped_column(String(48), unique=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, default=now_iso)
 
@@ -141,3 +142,12 @@ class AccountSession(Base):
     account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[int] = mapped_column(Integer)
     expires_at: Mapped[int] = mapped_column(Integer, index=True)
+
+
+class EmailChallenge(Base):
+    __tablename__ = "email_challenges"
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    purpose: Mapped[str] = mapped_column(String(16), primary_key=True)
+    digest: Mapped[str] = mapped_column(String(64))
+    issued_at: Mapped[int] = mapped_column(Integer, index=True)
+    attempts: Mapped[int] = mapped_column(Integer)

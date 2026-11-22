@@ -10,11 +10,16 @@ Use a Linux host with Docker Engine and Docker Compose. From the project directo
 
 ```sh
 cp .env.example .env
+vi .env  # Configure SMTP and the sender address
 docker compose up -d --build
 docker compose ps
 ```
 
 On the server, open [DayWeave on localhost](http://127.0.0.1:8787) and choose **Create account**. Registration creates a personal workspace. Use **Manage workspaces** to create more or add an existing account by username. Provider credentials and model settings follow the signed-in account. Set `DAYWEAVE_ENABLE_SIGNUP=0` to close registration after adding the intended accounts.
+
+Set `DAYWEAVE_SMTP_HOST`, `DAYWEAVE_SMTP_PORT`, `DAYWEAVE_SMTP_SECURITY` (`starttls` or `tls`), `DAYWEAVE_MAIL_FROM` and your relay's `DAYWEAVE_SMTP_USER` and `DAYWEAVE_SMTP_PASSWORD` in the private server environment. Use the provider's SMTP app password when required. Register with a username, password, email and the eight-digit code sent to that address. Sign in using the username or email. **Forgot password?** verifies the registered address and ends every existing session after the password changes.
+
+This development release starts with a fresh data volume when upgrading an installation with pre-email accounts. Point Compose at a new storage volume before the first start. An existing nonempty account registry is detected before its schema changes.
 
 Compose publishes the backend on loopback, including upgrades from earlier configurations. For phone or iPad access, first verify that the company tailnet cannot reach the personal service over IPv4 or IPv6, through subnet routes, Docker forwarding or a proxy such as Tailscale Serve or Funnel. Keep the deployment loopback-only while any path remains unverified. This setup requires no changes to company Tailscale configuration. [Network isolation and acceptance](docs/V1_DESIGN.md#6-personal-lan-access-and-company-tailnet-exclusion)
 
@@ -103,3 +108,5 @@ Run `sh scripts/test-container.sh` on a Docker host to exercise database migrati
 * [REST API and chat events](docs/API.md)
 * [AI provider setup and official authorization](docs/AI_PROVIDERS.md)
 * [Delivery status and roadmap](docs/ROADMAP.md)
+
+* [Tablet interface research and Playwright previews](docs/INTERFACE_RESEARCH.md)

@@ -38,6 +38,20 @@ try {
   await task('整理上周实验笔记', { category: '工作', status: 'done', estimated_minutes: 25, project_id: project.id })
   await task('确认下一轮测试窗口', { scheduled_date: null, due_date: date, priority: 'high' })
   await task('复核测试记录', { scheduled_date: tomorrow, project_id: project.id })
+  const offset = (iso, days) => new Date(Date.parse(iso + 'T12:00Z') + days * 86400000).toISOString().slice(0, 10)
+  const monday = offset(date, -((new Date(date + 'T12:00Z').getUTCDay() + 6) % 7))
+  const weekSamples = [
+    ['设备联调', 0, '10:00', 45],
+    ['整理书单', 1, '18:30', 20],
+    ['测试记录复盘', 2, '14:00', 60],
+    ['校准里程计', 3, '09:30', 40],
+    ['阅读导航论文', 4, '15:00', 30],
+    ['周末采购', 5, '11:00', 25],
+  ]
+  for (const [title, index, time, minutes] of weekSamples) {
+    const target = offset(monday, index)
+    if (target !== date) await task(title, { scheduled_date: target, planned_start_at: target + 'T' + time + ':00+08:00', estimated_minutes: minutes })
+  }
   await call(api, 'PATCH', '/ai/providers/compatible', {
     base_url: 'https://fixture.invalid/v1', api_key: 'local-preview', name: '本地示例', model: 'dayweave-fixture'
   })
@@ -90,6 +104,18 @@ try {
         await showDraft(page)
         const screenshot = name === 'ipad-portrait' ? 'ipad-draft' : name + '-draft'
         await page.screenshot({ path: path.join(out, screenshot + '.png'), animations: 'disabled' })
+      }
+      if (name.startsWith('ipad-')) {
+        await page.goto('/planner?view=week&date=' + date)
+        await page.locator('.planner-day').getByText('学习 ROS2 tracing', { exact: true }).waitFor()
+        await page.screenshot({ path: path.join(out, name + '-planner.png'), animations: 'disabled' })
+        if (name === 'ipad-portrait') {
+          await page.context().clearCookies()
+          await page.goto('/')
+          await page.getByRole('button', { name: '创建账号', exact: true }).click()
+          await page.getByLabel('邮箱验证码').waitFor()
+          await page.screenshot({ path: path.join(out, 'ipad-register.png'), animations: 'disabled' })
+        }
       }
       console.log(name + ' ' + config.viewport.width + 'x' + config.viewport.height)
     } finally {

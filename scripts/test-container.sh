@@ -5,7 +5,6 @@ cd "$(dirname "$0")/.."
 export COMPOSE_FILE=docker-compose.yml
 export COMPOSE_PROJECT_NAME="dayweave-test-$(date -u +%s)-$$"
 export DAYWEAVE_PORT=0 DAYWEAVE_COOKIE_SECURE=0 DAYWEAVE_PROXY_IP=127.0.0.1
-export DAYWEAVE_ADMIN_PASSWORD=only-for-the-disposable-container
 export DAYWEAVE_TRUSTED_HTTP_BASES=http://127.0.0.1:19197/v1
 test_project=$COMPOSE_PROJECT_NAME
 recovery_project="$test_project-recovery"

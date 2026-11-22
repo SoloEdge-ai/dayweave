@@ -3,7 +3,7 @@ import { i18n } from './i18n'
 
 export type Id = number
 export type Account = { id: string; username: string }
-export type Access = { authenticated: boolean; signup_enabled: boolean; account: Account | null }
+export type Access = { authenticated: boolean; signup_enabled: boolean; account: (Account & { email: string }) | null }
 export type WorkspaceInfo = { id: string; name: string; role: 'owner' | 'member' }
 let activeAccount: string | undefined
 let activeWorkspace: string | undefined

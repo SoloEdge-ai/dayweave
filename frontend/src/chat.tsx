@@ -28,6 +28,7 @@ import {
   type ModelCatalog,
   workspaceHeaders,
 } from './api'
+import { useSearchParams } from 'react-router-dom'
 import { Emblem, ErrorBox, IconButton, useWorkspace } from './ui'
 import { TaskDraftCard, type DraftEvent } from './draft'
 import { WorkspaceCommands, actionName, allowedAction, localCommand, type ChatAction } from './chat-actions'
@@ -151,7 +152,9 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
       (m) => m.role === 'user' || m.role === 'assistant',
     ) ??
     []
-  const [command,setCommand]=useState<ChatAction|null>(null),[voice,setVoice]=useState(false)
+  const [search] = useSearchParams()
+  const [command, setCommand] = useState<ChatAction | null>(null)
+  const [voice, setVoice] = useState(() => full && search.get('input') === 'voice')
   function openCommand(action:ChatAction) {
     setCommand(action);setVoice(false);setConfig(false);setShowHistory(false);setError('')
   }
@@ -343,12 +346,11 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
               <Emblem size="large" />
             </div>
             <h2>从哪里开始？</h2>
-            <p>
-              一起梳理待办、安排时间，
-              <br />
-              或回顾最近的进展。
-            </p>
             <div className="starter-list">
+              <button type="button" className="voice-starter" aria-expanded={voice} onClick={() => {
+                setVoice(!voice)
+                setConfig(false)
+              }}><Mic size={17} /><span>用语音创建任务</span><ArrowRight size={15} /></button>
               {prompts().map(({ icon: Icon, label, text }) => (
                 <button
                   key={label}

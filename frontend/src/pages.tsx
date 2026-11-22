@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { WeekStrip } from './week-strip'
 import { i18n } from './i18n'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -9,7 +10,6 @@ import {
   CalendarClock,
   CalendarDays,
   Check,
-  CheckCheck,
   ChevronDown,
   Clock3,
   ExternalLink,
@@ -23,8 +23,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
-  Sun,
-  Timer,
+  Mic,
 } from 'lucide-react'
 import {
   api,
@@ -93,7 +92,7 @@ function Section({
   to,
   children,
 }: {
-  icon: typeof Sun
+  icon: typeof CalendarDays
   title: string
   count?: number
   link?: string
@@ -245,23 +244,6 @@ export function TaskRow({
     </div>
   )
 }
-function Threads() {
-  return (
-    <div className="threads" aria-hidden="true">
-      {Array.from({ length: 23 }, (_, i) => (
-        <i
-          key={i}
-          style={{
-            width: 118 + i * 9 + 'px',
-            height: 150 + i * 9 + 'px',
-            right: -18 + i * 1.4 + 'px',
-            top: -43 - i * 2.4 + 'px',
-          }}
-        />
-      ))}
-    </div>
-  )
-}
 function dayOrder(tasks: Task[], zone: string) {
   const periodTimes: Record<string, string> = {
     morning: '09:00',
@@ -282,6 +264,7 @@ export function HomePage() {
   const data = useApi<Dashboard>('/dashboard/today'),
     { edit, settings } = useWorkspace(),
     nav = useNavigate()
+  const week = useApi<Task[]>('/tasks?view=week')
   const overview = data.data,
     zone = settings?.timezone ?? 'Asia/Hong_Kong',
     date = overview?.date ?? dateInZone(zone),
@@ -307,12 +290,13 @@ export function HomePage() {
       </div>
       <Heading
         title="今日总览"
+        sub={overview ? '已完成' + ' ' + tasks.filter(t => t.status === 'done').length + ' / ' + tasks.length +
+          '　' + '预计投入' + ' ' + tasks.reduce((sum, task) => sum + (task.estimated_minutes || 0), 0) + ' ' + '分钟' : undefined}
         action={
-          <div className="overview-sun" aria-hidden="true">
-            <Sun size={29} strokeWidth={1.3} />
-          </div>
+          <Link to="/chat?input=voice" className="primary dashboard-chat"><Mic size={17} />用语音创建任务</Link>
         }
       />
+      <WeekStrip selected={date} today={date} tasks={week.data} />
       <QuickCapture />
       {data.isPending ? (
         <Loading />
@@ -323,66 +307,6 @@ export function HomePage() {
         />
       ) : (
         <>
-          <div className="focus-panel">
-            <Threads />
-            <div className="focus-inner">
-              <div className="focus-label">
-                <Flag size={15} />
-                今日重点
-                <span>{String(focus.length).padStart(2, '0')} / 03</span>
-              </div>
-              {focus.length ? (
-                focus.slice(0, 3).map((t, i) => (
-                  <button
-                    key={t.id}
-                    className={'focus-task ' + (i === 0 ? 'first' : '')}
-                    onClick={() => edit({ kind: 'task', task: t })}
-                  >
-                    {t.title}
-                    <ArrowUpRight size={15} />
-                  </button>
-                ))
-              ) : (
-                <>
-                  <h2>今天，先专注一件事。</h2>
-                  <button
-                    className="focus-link"
-                    onClick={() =>
-                      edit({
-                        kind: 'task',
-                        initial: { pinned: true, scheduled_date: date },
-                      })
-                    }
-                  >
-                    <Plus size={14} />
-                    设置今日重点
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="metrics">
-            <div>
-              <ListChecks />
-              <span>今日任务</span>
-              <strong>{tasks.length}</strong>
-              <small>项</small>
-            </div>
-            <div>
-              <CheckCheck />
-              <span>已完成</span>
-              <strong>{tasks.filter((t) => t.status === 'done').length}</strong>
-              <small>项</small>
-            </div>
-            <div>
-              <Timer />
-              <span>预计投入</span>
-              <strong>
-                {tasks.reduce((n, t) => n + (t.estimated_minutes || 0), 0)}
-              </strong>
-              <small>分钟</small>
-            </div>
-          </div>
           <Section
             icon={ListChecks}
             title="今日任务"
@@ -409,6 +333,12 @@ export function HomePage() {
               </Empty>
             )}
           </Section>
+          {focus.length > 0 && <section className="daily-focus">
+            <h2><Flag size={16} />今日重点</h2>
+            <div>{focus.slice(0, 3).map(task =>
+              <button key={task.id} onClick={() => edit({ kind: 'task', task })}>{task.title}<ArrowUpRight size={14} /></button>
+            )}</div>
+          </section>}
           <Section
             icon={BookOpen}
             title="今日阅读与观看"
