@@ -48,6 +48,8 @@ export const Workspace = createContext<{
   settings: Settings | undefined
   projects: Project[]
   resources: Resource[]
+  accountId: string
+  workspaceId: string
 }>({
   edit: () => {},
   notify: () => {},
@@ -55,6 +57,8 @@ export const Workspace = createContext<{
   settings: undefined,
   projects: [],
   resources: [],
+  accountId: '',
+  workspaceId: '',
 })
 export const useWorkspace = () => useContext(Workspace)
 export function Brand() {

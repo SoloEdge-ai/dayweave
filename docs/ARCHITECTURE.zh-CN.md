@@ -4,7 +4,50 @@
 
 ## 部署
 
-多阶段镜像先用 Node 构建 React 前端，再在 Python 环境中运行 FastAPI。Uvicorn 从同一源提供 REST API、聊天事件流和编译后的前端。单个应用进程处理 SQLite 工作负载。Compose 命名卷挂载于 `/data`，保存数据库、上传文件、初始管理员密码和服务商凭据加密密钥。首次启动时工作区为空。
+多阶段镜像先用 Node 构建 React 前端，再在 Python 环境中运行 FastAPI。Uvicorn 从同一源提供 REST API、聊天事件流和编译后的前端。单个应用进程处理 SQLite 工作负载。Compose 数据卷 `/data` 保存账号库、工作区数据库、上传文件和服务商加密密钥。首次启动数据为空，管理员可以预置账号。
+
+## 账号与数据隔离
+
+账号和工作区各有独立的 UUID。注册时创建个人工作区，账号也可以创建更多工作区或加入共享工作区。所有者可以添加和移除成员。任务、项目、资料和日历时区属于工作区。服务商凭据、默认模型和其他个人偏好随账号切换工作区。会话和待确认操作仅在创建它的账号与当前工作区内可见。
+
+```mermaid
+erDiagram
+    ACCOUNT ||--o{ ACCOUNT_SESSION : "登录会话"
+    ACCOUNT ||--o{ WORKSPACE : "拥有"
+    ACCOUNT ||--o{ WORKSPACE_MEMBER : "加入"
+    WORKSPACE ||--o{ WORKSPACE_MEMBER : "包含成员"
+    ACCOUNT ||--|| ACCOUNT_PROFILE : "保存个人配置"
+    WORKSPACE ||--o{ TASK : "包含任务"
+    WORKSPACE ||--o{ RESOURCE : "包含资料"
+    ACCOUNT ||--o{ CONVERSATION : "发起"
+    WORKSPACE ||--o{ CONVERSATION : "隔离范围"
+    CONVERSATION ||--o{ MESSAGE : "包含消息"
+    CONVERSATION ||--o{ PENDING_ACTION : "生成草稿"
+```
+
+服务端根据登录会话与选定工作区检查成员资格。浏览器请求携带打开界面时的账号和工作区。另一个账号取得 Cookie 后，旧标签页的待保存修改无法写入该账号。文件通过当前工作区数据库中的资料记录定位。
+
+```mermaid
+flowchart LR
+    B["React<br/>选择账号和工作区"] --> H["Caddy<br/>家庭局域网 HTTPS"]
+    H --> F["FastAPI<br/>验证会话和成员资格"]
+    F --> I[("账号库<br/>账号、登录会话和成员")]
+    F --> W[("当前工作区<br/>任务、资料和历史")]
+    F --> P[("当前账号配置<br/>加密的服务商凭据与个人偏好")]
+    W --> U["工作区上传目录"]
+    F --> A["助手<br/>当前工作区与登录账号"]
+    A --> T["服务商适配器与本地工具"]
+```
+
+账号库保存带版本和盐值的 scrypt 密码哈希，以及随机会话令牌的 SHA-256 摘要。SQLite 把账号库、各工作区和各账号配置分别存放在 `/data`。云端可保留这些标识，采用数据库强制隔离、按工作区划分的对象存储与托管密钥，并配置共享限流、注册和账号恢复策略。
+
+```mermaid
+flowchart LR
+    L["单进程 SQLite 部署"] --> R["保留账号 ID、工作区 ID 和成员关系"]
+    R --> D["云端候选<br/>数据库强制隔离账号与工作区"]
+    U["工作区文件目录"] --> O["按工作区隔离的对象存储"]
+    K["本地加密密钥"] --> M["托管密钥服务"]
+```
 
 ## 请求流程
 
@@ -32,7 +75,7 @@
 | `task_resources`、`resource_projects` | 任务与资料、资料与项目的多对多关联 |
 | `change_log` | 对象标识、操作、修改前后快照、来源、会话和撤销状态 |
 | `user_settings` | 语言、时区、主题、服务商和规划默认项 |
-| `admin`、`admin_sessions` | 密码哈希和带有效期的会话令牌摘要 |
+| `accounts`、`workspaces`、`account_sessions` | 全局账号库、工作区归属、密码哈希和带有效期的会话令牌摘要 |
 | `ai_providers` | 服务地址、模型、能力目录、连接状态和加密凭据 |
 | `conversations`、`messages` | 本地聊天记录、服务商和模型标识，以及工具记录 |
 | `ai_turns`、`ai_confirmations` | 请求去重、可编辑草稿、版本号、确认状态和执行结果 |

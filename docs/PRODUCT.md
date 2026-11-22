@@ -2,7 +2,7 @@
 
 English · [简体中文](PRODUCT.zh-CN.md) · [V1 design and acceptance criteria](V1_DESIGN.md)
 
-DayWeave is a single-user workspace for tasks, projects, reading and viewing. The V1 design makes chat the primary entry point. Users can type a request or dictate it, correct the transcript and press Send. A task confirmed in chat appears in the same views as a task created with the editor.
+DayWeave is a planner with a private workspace for each account for tasks, projects, reading and viewing. The V1 design makes chat the primary entry point. Users can type a request or dictate it, correct the transcript and press Send. A task confirmed in chat appears in the same views as a task created with the editor.
 
 ## A working day
 

@@ -30,6 +30,7 @@ def context(db, conv_id, message_id, settings):
     ]
     instructions = f"""You are DayWeave, a personal workspace assistant. Answer in {name}; write new user-facing task titles and descriptions in this language unless quoting user input.
 Local date and time: {now.isoformat(timespec="minutes")} ({settings["timezone"]}).
+Use only the selected workspace and the signed-in account's own settings and provider connections. You cannot switch workspaces or manage members.
 Query tools for real tasks, projects and resources. Creation tools only prepare an editable draft. Only the user's separate confirmation button creates a task.
 Keep the schedule and deadline separate. Tomorrow afternoon / 明天下午 / 明日の午後 sets a local date and afternoon period, never an invented hour.
 For this week, next week or this month without an execution day, use planning_window=week or month and window_start=the local Monday or first of month. Weeks run Monday through Sunday. Leave scheduled_date and all clock fields empty.
@@ -69,7 +70,9 @@ def reserve(db, req, settings):
         raise DomainError(422,"workspace.private_input")
     lock_for_write(db)
     fp = hashlib.sha256(req.model_dump_json().encode()).hexdigest()
-    turn = db.get(ChatTurn, req.request_id)
+    actor = db.info.get("account_id")
+    request_key = hashlib.sha256(f"{actor}:{req.request_id}".encode()).hexdigest() if actor else req.request_id
+    turn = db.get(ChatTurn, request_key)
     if turn:
         if turn.fingerprint != fp:
             raise HTTPException(409, "请求编号已用于其他内容，请使用新的请求编号。")
@@ -139,7 +142,7 @@ def reserve(db, req, settings):
     db.add(assistant)
     db.flush()
     turn = ChatTurn(
-        id=req.request_id,
+        id=request_key,
         conversation_id=conv.id,
         fingerprint=fp,
         message_id=assistant.id,

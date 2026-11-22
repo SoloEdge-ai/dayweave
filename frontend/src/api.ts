@@ -2,6 +2,25 @@ import { useQuery } from '@tanstack/react-query'
 import { i18n } from './i18n'
 
 export type Id = number
+export type Account = { id: string; username: string }
+export type Access = { authenticated: boolean; signup_enabled: boolean; account: Account | null }
+export type WorkspaceInfo = { id: string; name: string; role: 'owner' | 'member' }
+let activeAccount: string | undefined
+let activeWorkspace: string | undefined
+export function setActiveAccount(account: Account | null) {
+  if (activeAccount !== account?.id) activeWorkspace = undefined
+  activeAccount = account?.id
+}
+export function setActiveWorkspace(workspace?: string) {
+  activeWorkspace = workspace
+}
+export function workspaceHeaders(account = activeAccount, workspace = activeWorkspace): Record<string, string> {
+  return { ...(account ? { 'X-DayWeave-Account': account } : {}),
+    ...(workspace ? { 'X-DayWeave-Workspace': workspace } : {}) }
+}
+export function workspaceLink(path: string) {
+  return activeWorkspace ? path + (path.includes('?') ? '&' : '?') + 'workspace=' + encodeURIComponent(activeWorkspace) : path
+}
 export type Task = {
   id: Id
   title: string
@@ -166,26 +185,35 @@ export async function api<T>(
   path: string,
   method = 'GET',
   data?: unknown,
+  account = activeAccount,
+  workspace = activeWorkspace,
 ): Promise<T> {
   const form = data instanceof FormData
   const res = await fetch('/api' + path, {
     method,
     credentials: 'same-origin',
-    headers: { 'Accept-Language': i18n.language, ...(data !== undefined && !form ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { 'Accept-Language': i18n.language, ...workspaceHeaders(account, workspace), ...(data !== undefined && !form ? { 'Content-Type': 'application/json' } : {}) },
     body: form ? data : data !== undefined ? JSON.stringify(data) : undefined,
   })
   if (!res.ok) {
-    if (res.status === 401 && !path.startsWith('/auth'))
+    if (res.status === 401 && !path.startsWith('/auth') && account === activeAccount && workspace === activeWorkspace)
       window.dispatchEvent(new Event('session-ended'))
     throw new Error(await responseError(res))
   }
   if (res.status === 204 || res.headers.get('content-length') === '0')
     return undefined as T
   const text = await res.text()
-  return text ? (JSON.parse(text) as T) : (undefined as T)
+  const value = text ? JSON.parse(text) : undefined
+  if (path === '/auth/status' || path === '/auth/login' || path === '/auth/register')
+    setActiveAccount(value.account)
+  if (path === '/auth/logout') setActiveAccount(null)
+  return value as T
 }
 export function useApi<T>(path: string, enabled = true) {
-  return useQuery<T>({ queryKey: [path], queryFn: () => api<T>(path), enabled })
+  const account = activeAccount
+  const workspace = path.startsWith('/workspaces') ? undefined : activeWorkspace
+  return useQuery<T>({ queryKey: path === '/auth/status' ? [path] : [path, account, workspace],
+    queryFn: () => api<T>(path, 'GET', undefined, account, workspace), enabled })
 }
 export function dateInZone(zone = 'Asia/Hong_Kong', offset = 0) {
   const parts = new Intl.DateTimeFormat('en-US', {

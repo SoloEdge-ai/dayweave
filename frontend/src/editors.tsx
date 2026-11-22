@@ -9,6 +9,7 @@ import {
   progressLabels,
   projectLabels,
   safeUrl,
+  workspaceLink,
   statusLabels,
   typeLabels,
   type Project,
@@ -261,7 +262,7 @@ function TaskEditor({
               {resources
                 .filter((r) => links.includes(r.id))
                 .map((r) => {
-                  const url = r.file_url || safeUrl(r.url)
+                  const url = r.file_url ? workspaceLink(r.file_url) : safeUrl(r.url)
                   return (
                     url && (
                       <a href={url} target="_blank" rel="noreferrer" key={r.id}>

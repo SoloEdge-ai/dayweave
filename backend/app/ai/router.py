@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import Field
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from app import services
-from app.db import get_db
+from app.db import get_db, stream_sessions
 
 from . import drafts, oauth
 from .adapters import DEFAULTS, efforts
@@ -153,7 +153,7 @@ def chat(req: ChatRequest, db: DB):
     turn, replay = reserve(db, req, services.get_settings(db))
     turn_id, lease = turn.id, turn.lease
     db.commit()
-    factory = sessionmaker(bind=db.get_bind(), expire_on_commit=False)
+    factory = stream_sessions(db)
 
     def stream():
         for event in events(factory, req, turn_id, lease, replay):

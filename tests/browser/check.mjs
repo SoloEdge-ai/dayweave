@@ -134,7 +134,7 @@ const copies = {
     dashboard: 'Today’s overview', newTask: 'New task', title: 'Task title', date: 'Scheduled date',
     minutes: 'Estimate (minutes)', due: 'Due date', composer: 'Message DayWeave', send: 'Send',
     stop: 'Stop generating', reply: 'The test connection is working.', prompt: 'Create a ROS2 tracing task.',
-    suggested: 'ROS2 tracing exercise', badLogin: 'The administrator password is incorrect.',
+    suggested: 'ROS2 tracing exercise', badLogin: 'The username or password is incorrect.',
     card: 'Task draft', draftTitle: 'Task title', confirm: 'Confirm creation', cancel: 'Cancel draft',
   },
   ja: {
@@ -142,7 +142,7 @@ const copies = {
     dashboard: '今日の概要', newTask: '新規タスク', title: 'タスク名', date: '予定日',
     minutes: '所要時間（分）', due: '期限日', composer: 'アシスタントにメッセージ', send: '送信',
     stop: '生成を停止', reply: 'テスト接続に成功しました。', prompt: 'ROS2 tracing の学習タスクを作成して。',
-    suggested: 'ROS2 tracing の演習', badLogin: '管理者パスワードが正しくありません。',
+    suggested: 'ROS2 tracing の演習', badLogin: 'ユーザー名またはパスワードが正しくありません。',
     card: 'タスクの下書き', draftTitle: 'タスクのタイトル', confirm: '作成を確定', cancel: '下書きをキャンセル',
   },
 }
@@ -168,6 +168,7 @@ async function checkLoginLocales(page) {
     await page.reload()
     await page.waitForFunction(lang => document.documentElement.lang === lang, language)
     const field = page.locator('input[type=password]')
+    await page.locator('input[autocomplete=username]').fill('admin')
     await field.fill('incorrect-fixture-password')
     const [failure] = await Promise.all([
       page.waitForResponse(r => r.url().endsWith('/api/auth/login')), field.press('Enter'),
@@ -179,6 +180,54 @@ async function checkLoginLocales(page) {
   }
   await page.getByRole('combobox', { name: languageControl }).selectOption('zh-CN')
   console.log('PASS unauthenticated language selection, reload and localized sign-in feedback in English and Japanese')
+}
+
+async function checkAccountIsolation(page, app, firstTasks) {
+  await call(page.request, 'PATCH', '/settings', { language: 'zh-CN' })
+  await page.goto('/')
+  await page.getByRole('button', { name: '退出登录' }).click()
+  await page.getByRole('button', { name: '创建账号', exact: true }).click()
+  await page.locator('input[autocomplete=username]').fill('second-user')
+  await page.locator('input[type=password]').fill('separate-fixture-password')
+  await page.getByRole('button', { name: '注册并登录' }).click()
+  await page.getByRole('heading', { name: '今日总览' }).waitFor()
+  assert.deepEqual(await call(page.request, 'GET', '/tasks'), [])
+  assert.deepEqual(await call(page.request, 'GET', '/ai/conversations'), [])
+  await page.getByRole('textbox', { name: '快捷录入' }).fill('Second account task')
+  await page.getByRole('textbox', { name: '快捷录入' }).press('Enter')
+  await page.getByText('任务已放入收件箱', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '退出登录' }).click()
+  await page.locator('input[autocomplete=username]').fill('admin')
+  await page.locator('input[type=password]').fill(app.password)
+  await page.getByRole('button', { name: '进入工作区' }).click()
+  await page.getByRole('heading', { name: '今日总览' }).waitFor()
+  assert.deepEqual((await call(page.request, 'GET', '/tasks')).map(t => t.title), firstTasks.map(t => t.title))
+  assert.ok((await call(page.request, 'GET', '/ai/conversations')).length)
+  await page.getByRole('button', { name: '管理工作区' }).click()
+  await page.getByLabel('工作区名称').fill('Shared browser workspace')
+  await page.getByRole('button', { name: '创建工作区' }).click()
+  await page.getByRole('dialog', { name: '管理工作区' }).waitFor({ state: 'hidden' })
+  const spaces = await call(page.request, 'GET', '/workspaces')
+  const shared = spaces.find(row => row.name === 'Shared browser workspace')
+  assert.ok(shared)
+  await page.getByRole('button', { name: '管理工作区' }).click()
+  await page.getByLabel('成员用户名').fill('second-user')
+  await page.getByRole('button', { name: '添加成员' }).click()
+  await page.getByText('second-user', { exact: true }).waitFor()
+  await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('textbox', { name: '快捷录入' }).fill('Shared browser task')
+  await page.getByRole('textbox', { name: '快捷录入' }).press('Enter')
+  await page.getByText('任务已放入收件箱', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '退出登录' }).click()
+  await page.locator('input[autocomplete=username]').fill('second-user')
+  await page.locator('input[type=password]').fill('separate-fixture-password')
+  await page.getByRole('button', { name: '进入工作区' }).click()
+  const switcher = page.getByRole('combobox', { name: '切换工作区' })
+  await switcher.selectOption({ label: shared.name })
+  await page.goto('/tasks/inbox')
+  await page.getByRole('checkbox', { name: '完成“Shared browser task”' }).waitFor()
+  assert.equal(await page.getByText('Second account task', { exact: true }).count(), 0)
+  console.log('PASS account registration, workspace creation, inviting a member and switching sharable task data')
 }
 
 async function checkWorkspaceLocales(page, api) {
@@ -296,6 +345,7 @@ try {
   page.on('pageerror', error => faults.push(String(error)))
   await page.goto('/')
   await checkLoginLocales(page)
+  await page.locator('input[autocomplete=username]').fill('admin')
   await page.locator('input[type=password]').fill(app.password)
   await page.locator('input[type=password]').press('Enter')
   await page.getByRole('heading', { name: '今日总览' }).waitFor()
@@ -502,6 +552,7 @@ try {
     await tabletBrowser.close()
   }
   await checkWorkspaceLocales(page, api)
+  await checkAccountIsolation(page, app, await call(api, 'GET', '/tasks'))
   assert.deepEqual(faults, [])
 } finally {
   await browser.close()

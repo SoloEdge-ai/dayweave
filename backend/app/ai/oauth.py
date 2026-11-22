@@ -57,8 +57,8 @@ def host_id(path):
     return path.read_text(encoding="utf8").strip()
 
 
-def transfer_key():
-    path = data_dir() / ".siwc-transfer-key"
+def transfer_key(directory=None):
+    path = (directory or data_dir()) / ".siwc-transfer-key"
     generated = X25519PrivateKey.generate()
     raw = generated.private_bytes(
         ENC, serialization.PrivateFormat.Raw, serialization.NoEncryption()
@@ -232,12 +232,13 @@ def login(recipient_path, output_path):
 
 
 def import_envelope(db, row, envelope):
+    directory = db.info.get("profile_dir", data_dir())
     obj = json.loads(
-        derive(transfer_key(), envelope["ephemeral"]).decrypt(
+        derive(transfer_key(directory), envelope["ephemeral"]).decrypt(
             envelope["ciphertext"], ttl=600
         )
     )
-    if obj.get("host_id") != host_id(data_dir() / ".siwc-host"):
+    if obj.get("host_id") != host_id(directory / ".siwc-host"):
         raise ProviderError("授权文件属于其他主机。")
     identity = claims(obj["id_token"], obj["client_id"], obj.pop("nonce"))
     if identity["sub"] != obj["subject"]:
@@ -357,7 +358,7 @@ def revoke(db, row):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("prepare", help="On the VM, print its public transfer descriptor.")
+    prepare = sub.add_parser("prepare", help="On the VM, print the workspace's public transfer descriptor.")
     auth = sub.add_parser(
         "login",
         help="On your browser computer, authorize an eligible DayWeave installation.",
@@ -370,28 +371,33 @@ def main():
     )
     auth.add_argument("--recipient", type=Path, required=True)
     auth.add_argument("--out", type=Path, required=True)
-    sub.add_parser(
+    import_command = sub.add_parser(
         "import",
         help="On the VM, read a sealed credential envelope from standard input.",
     )
+    for command in (prepare, import_command):
+        command.add_argument("--username", required=True, help="Account that owns the workspace")
     args = parser.parse_args()
-    if args.command == "prepare":
-        print(
-            json.dumps(
-                {
-                    "host_id": host_id(data_dir() / ".siwc-host"),
-                    "public_key": public_string(transfer_key()),
-                }
-            )
-        )
-    elif args.command == "login":
+    if args.command == "login":
         login(args.recipient, args.out)
-    else:
-        from app.db import SessionLocal
+        return
+    from sqlalchemy import select
+    from app.db import SessionLocal, profile_dir, stored_session
+    from app.models import Account
 
+    with SessionLocal() as registry:
+        account = registry.scalar(select(Account.id).where(Account.username == args.username.strip().lower()))
+    if account is None:
+        parser.error("No account for that username.")
+    directory = profile_dir(account)
+    if args.command == "prepare":
+        with stored_session(directory):
+            print(json.dumps({"host_id": host_id(directory / ".siwc-host"), "public_key": public_string(transfer_key(directory))}))
+    else:
         from .providers import provider
 
-        with SessionLocal() as db:
+        with stored_session(directory) as db:
+            db.info["profile_dir"] = directory
             import_envelope(db, provider(db, "chatgpt"), json.load(sys.stdin))
         print("Registration imported. Test the connection in Settings.")
 

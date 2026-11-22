@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { I18nextProvider, useTranslation } from 'react-i18next'
 import { i18n, languageChoices, setLanguage } from './i18n'
@@ -30,7 +30,6 @@ import {
   Inbox,
   LayoutDashboard,
   ListChecks,
-  LockKeyhole,
   LogOut,
   Menu,
   MessageCircle,
@@ -44,16 +43,21 @@ import {
 import {
   api,
   errorText,
+  setActiveAccount,
   useApi,
   viewLabels,
   type Project,
   type Resource,
   type Settings,
+  type Access,
+  type Account,
+  type WorkspaceInfo,
 } from './api'
 import { Chat } from './chat'
 import { Editors } from './editors'
 import { HomePage, LibraryPage, ProjectsPage, TasksPage } from './pages'
 import { PlannerPage } from './planner'
+import { WorkspaceChooser } from './workspaces'
 import { AuditPage, SettingsPage } from './settings'
 import {
   Brand,
@@ -82,9 +86,11 @@ function useMedia(query: string) {
   }, [query])
   return matches
 }
-function Login({ done }: { done: () => void }) {
+function Login({ done, signupEnabled }: { done: (status: Access) => void; signupEnabled: boolean }) {
   const pendingLanguageKey = 'dayweave.login-language'
   const [password, setPassword] = useState(''),
+    [username, setUsername] = useState(''),
+    [signup, setSignup] = useState(false),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
   return (
@@ -116,21 +122,21 @@ function Login({ done }: { done: () => void }) {
             <span className="date-rule" />
             个人工作区
           </div>
-          <h1>欢迎回到织日</h1>
-          <p>登录以查看今天的任务、项目与资料。</p>
+          <h1>{signup ? '创建账号' : '欢迎回到织日'}</h1>
+          <p>{signup ? '每个账号拥有独立的工作区。' : '登录以查看今天的任务、项目与资料。'}</p>
           <form
             onSubmit={async (e) => {
               e.preventDefault()
               setError('')
               setBusy(true)
               try {
-                await api('/auth/login', 'POST', { password })
+                const status = await api<Access>(signup ? '/auth/register' : '/auth/login', 'POST', { username, password })
                 const explicitLanguage = sessionStorage.getItem(pendingLanguageKey)
                 if (explicitLanguage) {
                   await api('/settings', 'PATCH', { language: explicitLanguage })
                   sessionStorage.removeItem(pendingLanguageKey)
                 }
-                done()
+                done(status)
               } catch (e) {
                 setError(errorText(e))
               } finally {
@@ -139,32 +145,32 @@ function Login({ done }: { done: () => void }) {
             }}
           >
             <label className="field">
-              <span>管理员密码</span>
+              <span>用户名</span>
+              <input value={username} autoComplete="username" autoCapitalize="none" spellCheck={false}
+                required minLength={3} maxLength={48} onChange={e => setUsername(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>密码</span>
               <input
                 value={password}
                 type="password"
-                autoComplete="current-password"
-                autoFocus
+                autoComplete={signup ? 'new-password' : 'current-password'}
+                minLength={signup ? 10 : undefined}
                 required
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
             {error && <ErrorBox message={error} />}
             <button className="primary" disabled={busy}>
-              {busy ? '正在登录…' : '进入工作区'}
+              {busy ? '正在登录…' : signup ? '注册并登录' : '进入工作区'}
               <ArrowRight size={16} />
             </button>
           </form>
-          <details>
-            <summary>
-              <LockKeyhole size={13} />
-              首次登录
-            </summary>
-            <p>
-              使用部署时设置的管理员密码，或读取服务器数据目录中的{' '}
-              <code>admin-password.txt</code>。
-            </p>
-          </details>
+          {signupEnabled && <button type="button" className="text-button" disabled={busy} onClick={() => {
+            setSignup(!signup)
+            setPassword('')
+            setError('')
+          }}>{signup ? '返回登录' : '创建账号'}</button>}
         </div>
       </div>
     </div>
@@ -188,7 +194,7 @@ const extraEntries = (): [string, string, LucideIcon][] => [
   ['/history', '变更记录', History],
   ['/settings', '设置', SlidersHorizontal],
 ]
-function SideNav({ close, logout }: { close: () => void; logout: () => void }) {
+function SideNav({ close, logout, account }: { close: () => void; logout: () => void; account: Account }) {
   const links = (items: [string, string, LucideIcon][]) =>
     items.map(([url, label, Icon]) => (
       <NavLink
@@ -219,7 +225,7 @@ function SideNav({ close, logout }: { close: () => void; logout: () => void }) {
           <span className="avatar">织</span>
           <div>
             <strong>个人工作区</strong>
-            <small>本地管理员</small>
+            <small>{account.username}</small>
           </div>
           <IconButton icon={LogOut} label="退出登录" onClick={logout} />
         </div>
@@ -227,7 +233,9 @@ function SideNav({ close, logout }: { close: () => void; logout: () => void }) {
     </nav>
   )
 }
-function Shell({ logout }: { logout: () => void }) {
+function Shell({ logout, account, workspace, switcher }: {
+  logout: () => void; account: Account; workspace: WorkspaceInfo; switcher: ReactNode
+}) {
   const loc = useLocation(),
     nav = useNavigate(),
     client = useQueryClient()
@@ -311,6 +319,8 @@ function Shell({ logout }: { logout: () => void }) {
         settings: settings.data,
         projects: projects.data ?? [],
         resources: resources.data ?? [],
+        accountId: account.id,
+        workspaceId: workspace.id,
         edit: setEditor,
         notify,
         refresh,
@@ -321,7 +331,7 @@ function Shell({ logout }: { logout: () => void }) {
       </a>
       <div className={'shell ' + (showAi && dockAssistant ? 'with-ai' : '')}>
         {!mobileNav && (
-          <SideNav close={() => setNavOpen(false)} logout={logout} />
+          <SideNav close={() => setNavOpen(false)} logout={logout} account={account} />
         )}
         <div className="work-area">
           <header className="topbar">
@@ -340,6 +350,7 @@ function Shell({ logout }: { logout: () => void }) {
               <strong>{title}</strong>
             </div>
             <div className="top-actions">
+              {switcher}
               <button
                 className="search-shortcut"
                 title="搜索任务"
@@ -405,7 +416,7 @@ function Shell({ logout }: { logout: () => void }) {
                   <X size={18} />
                 </button>
               </Dialog.Close>
-              <SideNav close={() => setNavOpen(false)} logout={logout} />
+              <SideNav close={() => setNavOpen(false)} logout={logout} account={account} />
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
@@ -439,12 +450,14 @@ function Shell({ logout }: { logout: () => void }) {
 }
 function App() {
   useTranslation()
-  const auth = useApi<{ authenticated: boolean }>('/auth/status'),
+  const auth = useApi<Access>('/auth/status'),
     client = useQueryClient()
   useEffect(() => {
     const clear = () => {
-      client.clear()
-      client.setQueryData(['/auth/status'], { authenticated: false })
+      const signup = client.getQueryData<Access>(['/auth/status'])?.signup_enabled ?? false
+      setActiveAccount(null)
+      client.removeQueries({ predicate: query => query.queryKey[0] !== '/auth/status' })
+      client.setQueryData<Access>(['/auth/status'], { authenticated: false, account: null, signup_enabled: signup })
     }
     window.addEventListener('session-ended', clear)
     return () => window.removeEventListener('session-ended', clear)
@@ -466,26 +479,35 @@ function App() {
         />
       </div>
     )
-  if (!auth.data?.authenticated)
+  if (!auth.data?.authenticated || !auth.data.account)
     return (
       <Login
-        done={() =>
-          client.setQueryData(['/auth/status'], { authenticated: true })
-        }
+        signupEnabled={auth.data?.signup_enabled ?? false}
+        done={status => {
+          client.removeQueries({ predicate: query => query.queryKey[0] !== '/auth/status' })
+          client.setQueryData(['/auth/status'], status)
+        }}
       />
     )
+  const { account, signup_enabled } = auth.data
   return (
-    <Shell
+    <WorkspaceChooser key={account.id} account={account}>
+    {(workspace, switcher) => <Shell
+      key={workspace.id}
+      account={account}
+      workspace={workspace}
+      switcher={switcher}
       logout={async () => {
         try {
           await api('/auth/logout', 'POST')
-          client.clear()
-          client.setQueryData(['/auth/status'], { authenticated: false })
+          client.removeQueries({ predicate: query => query.queryKey[0] !== '/auth/status' })
+          client.setQueryData<Access>(['/auth/status'], { authenticated: false, account: null, signup_enabled })
         } catch (e) {
           window.alert(errorText(e))
         }
       }}
-    />
+    />}
+    </WorkspaceChooser>
   )
 }
 createRoot(document.getElementById('root')!).render(

@@ -26,6 +26,7 @@ import {
   useApi,
   type Provider,
   type ModelCatalog,
+  workspaceHeaders,
 } from './api'
 import { Emblem, ErrorBox, IconButton, useWorkspace } from './ui'
 import { TaskDraftCard, type DraftEvent } from './draft'
@@ -44,9 +45,8 @@ type ToolItem = {
 function isDraft(tool:ToolItem):tool is ToolItem & DraftEvent {
   return tool.type==='task_draft' && 'drafts' in tool && Array.isArray(tool.drafts)
 }
-const activeConversation='dayweave:conversation'
-function lastConversation(){
-  try{const value=Number(sessionStorage.getItem(activeConversation));return Number.isSafeInteger(value)&&value>0?value:null}catch{return null}
+function lastConversation(storageKey: string){
+  try{const value=Number(sessionStorage.getItem(storageKey));return Number.isSafeInteger(value)&&value>0?value:null}catch{return null}
 }
 type ChatMessage = {
   id?: number
@@ -95,10 +95,11 @@ function requestId() {
   ].join('-')
 }
 export function Chat({ full, close }: { full: boolean; close: () => void }) {
-  const { settings, refresh, notify } = useWorkspace(),
+  const { settings, refresh, notify, accountId, workspaceId } = useWorkspace(),
+    activeConversation = 'dayweave:conversation:' + accountId + ':' + workspaceId,
     providers = useApi<Provider[]>('/ai/providers'),
     convs = useApi<Conversation[]>('/ai/conversations')
-  const [cid, setCid] = useState<number | null>(lastConversation),
+  const [cid, setCid] = useState<number | null>(() => lastConversation(activeConversation)),
     history = useApi<Conversation>('/ai/conversations/' + cid, cid !== null)
   const [draft, setDraft] = useState(''),
     [current, setCurrent] = useState<ChatMessage[] | null>(null),
@@ -156,7 +157,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
   }
   useEffect(()=>{
     try{if(cid)sessionStorage.setItem(activeConversation,String(cid));else sessionStorage.removeItem(activeConversation)}catch{/* History remains available in SQLite. */}
-  },[cid])
+  },[cid, activeConversation])
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'nearest' })
   }, [values.length, values[values.length - 1]?.content])
@@ -172,7 +173,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
   async function send(e: FormEvent) {
     e.preventDefault()
     const content = draft.trim()
-    if (!content || busy) return
+    if (!content || busy || providers.isPending) return
     const local=localCommand(content,!canSend)
     if(local){
       setDraft('');openCommand(local);return
@@ -231,7 +232,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept-Language': document.documentElement.lang },
+        headers: { 'Content-Type': 'application/json', 'Accept-Language': document.documentElement.lang, ...workspaceHeaders(accountId, workspaceId) },
         body: JSON.stringify({
           content,
           conversation_id: cid,
@@ -463,7 +464,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
             </button>
           </div>
         )}
-        {!canSend && !config && (
+        {!canSend && !config && !providers.isPending && (
           <button
             className="connect-notice"
             onClick={()=>openCommand({action:'provider_credentials'})}
@@ -525,7 +526,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
                 className="send"
                 title="发送"
                 aria-label="发送"
-                disabled={!draft.trim()}
+                disabled={!draft.trim() || providers.isPending}
               >
                 <ArrowUp size={17} />
               </button>

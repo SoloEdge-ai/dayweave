@@ -10,7 +10,7 @@ from .i18n import DomainError, normalize_language
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
-from .models import Project, Resource, Settings, Task, TaskChangeLog, now_iso
+from .models import CalendarSettings, Project, Resource, Settings, Task, TaskChangeLog, now_iso
 from .records import KINDS, active, audit, columns, finish, links, lock_for_write, snapshot
 from .schemas import ProjectInput, ResourceInput, SettingsInput, TaskInput
 from .time_rules import apply_time_rules, local_today, merge_schedule, week_bounds
@@ -27,6 +27,9 @@ def get_settings(db):
             db.flush()
     values = columns(row, exclude={"id"})
     values["language"] = normalize_language(row.language)
+    if db.info.get("workspace_id"):
+        calendar = db.get(CalendarSettings, 1)
+        values["timezone"] = calendar.timezone if calendar else "Asia/Hong_Kong"
     return values
 
 
@@ -36,6 +39,16 @@ def update_settings(db, data, *, source="manual", conversation_id=None, record_c
     values = SettingsInput.model_validate({**previous, **data})
     row = db.get(Settings, 1)
     for key, value in values.model_dump().items():
+        if key == "timezone" and db.info.get("workspace_id"):
+            if value != previous["timezone"]:
+                if not db.info["workspace_owner"]:
+                    raise DomainError(403, "workspace.calendar_owner")
+                calendar = db.get(CalendarSettings, 1)
+                if calendar is None:
+                    calendar = CalendarSettings(id=1)
+                    db.add(calendar)
+                calendar.timezone = value
+            continue
         setattr(row, key, value)
     db.flush()
     if previous["timezone"] != values.timezone:
@@ -50,7 +63,7 @@ def update_settings(db, data, *, source="manual", conversation_id=None, record_c
     after=get_settings(db)
     if previous!=after and record_change:
         db.add(TaskChangeLog(entity_type="settings",entity_id=1,action="update",before=previous,after=after,
-                             source=source,conversation_id=conversation_id))
+                             source=source,conversation_id=conversation_id,actor_id=db.info.get("account_id")))
         db.flush()
     return after
 
@@ -266,26 +279,40 @@ def delete_task(db, id, *, source="manual", conversation_id=None):
 
 
 def list_changes(db, limit=100):
-    return [columns(r) for r in db.scalars(select(TaskChangeLog).order_by(TaskChangeLog.id.desc()).limit(limit))]
+    query = select(TaskChangeLog).order_by(TaskChangeLog.id.desc())
+    actor = db.info.get("account_id")
+    if actor:
+        query = query.where(or_(TaskChangeLog.entity_type != "settings", TaskChangeLog.actor_id == actor))
+    if limit is not None:
+        query = query.limit(limit)
+    return [columns(row, exclude={"conversation_id"} if actor and row.actor_id != actor else ()) for row in db.scalars(query)]
 
 
 def undo(db, id, *, source="manual", conversation_id=None):
     lock_for_write(db)
     entry = db.get(TaskChangeLog, id)
-    if not entry or entry.undone_at or entry.action == "undo":
+    actor = db.info.get("account_id")
+    if (not entry or entry.undone_at or entry.action == "undo" or
+            (actor and entry.entity_type == "settings" and entry.actor_id != actor)):
         raise DomainError(409, "history.cannot_undo")
-    latest = db.scalar(select(TaskChangeLog.id).where(
+    query = select(TaskChangeLog.id).where(
         TaskChangeLog.entity_type == entry.entity_type, TaskChangeLog.entity_id == entry.entity_id,
         TaskChangeLog.undone_at.is_(None), TaskChangeLog.action != "undo",
-    ).order_by(TaskChangeLog.id.desc()).limit(1))
+    )
+    if actor and entry.entity_type == "settings":
+        query = query.where(TaskChangeLog.actor_id == actor)
+    latest = db.scalar(query.order_by(TaskChangeLog.id.desc()).limit(1))
     if latest != entry.id:
         raise DomainError(409, "history.newer_change")
     if entry.entity_type=="settings":
         before=get_settings(db)
-        restored=update_settings(db,entry.before,record_change=False)
+        restore = dict(entry.before)
+        if actor and not db.info["workspace_owner"]:
+            restore.pop("timezone", None)
+        restored=update_settings(db,restore,record_change=False)
         entry.undone_at=now_iso()
         db.add(TaskChangeLog(entity_type="settings",entity_id=1,action="undo",before=before,after=restored,
-                             source=source,conversation_id=conversation_id))
+                             source=source,conversation_id=conversation_id,actor_id=actor))
         db.flush()
         return {"id":entry.id,"undone":True,"record":restored}
     model = next(cls for cls, name in KINDS.items() if name == entry.entity_type)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AudioLines, FileAudio, LoaderCircle, Mic, Square, X } from 'lucide-react'
-import { errorText, responseError } from './api'
-import { ErrorBox, IconButton } from './ui'
+import { errorText, responseError, workspaceHeaders } from './api'
+import { ErrorBox, IconButton, useWorkspace } from './ui'
 
 const maxBytes = 20 * 1024 * 1024
 const maxSeconds = 120
@@ -13,6 +13,7 @@ function extension(mime:string) {
   return 'webm'
 }
 export function VoiceInput({insert,close}:{insert:(value:string)=>void;close:()=>void}) {
+  const { accountId, workspaceId } = useWorkspace()
   const [file,setFile]=useState<File|null>(null),[url,setUrl]=useState('')
   const [phase,setPhase]=useState<'idle'|'asking'|'recording'|'transcribing'>('idle')
   const [elapsed,setElapsed]=useState(0),[error,setError]=useState('')
@@ -84,7 +85,7 @@ export function VoiceInput({insert,close}:{insert:(value:string)=>void;close:()=
     try{
       const data=new FormData()
       data.set('file',file);data.set('language',document.documentElement.lang)
-      const response=await fetch('/api/ai/transcribe',{method:'POST',body:data,signal:abort.signal,credentials:'same-origin',headers:{'Accept-Language':document.documentElement.lang}})
+      const response=await fetch('/api/ai/transcribe',{method:'POST',body:data,signal:abort.signal,credentials:'same-origin',headers:{'Accept-Language':document.documentElement.lang,...workspaceHeaders(accountId, workspaceId)}})
       if(!response.ok)throw new Error(await responseError(response))
       const result=await response.json()
       if(typeof result.text!=='string'||!result.text.trim())throw new Error('未识别到语音，请重录或选择其他音频。')

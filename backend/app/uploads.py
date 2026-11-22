@@ -6,7 +6,6 @@ from fastapi.responses import FileResponse
 
 from .i18n import DomainError, translate
 from . import services
-from .db import data_dir
 from .models import Resource
 from .records import active
 
@@ -21,7 +20,7 @@ async def store_upload(db, file: UploadFile, title):
     extension = pathlib.PurePath(name).suffix.lower()
     if extension not in TYPES or len(name) > 220 or any(ord(c) < 32 for c in name):
         raise DomainError(422, "upload.extension")
-    directory = data_dir() / "uploads"
+    directory = db.info["workspace_dir"] / "uploads"
     directory.mkdir(mode=0o700, exist_ok=True)
     path = directory / (uuid.uuid4().hex + extension)
     try:
@@ -63,7 +62,7 @@ def open_file(db, resource_id):
     item = active(db, Resource, resource_id)
     if not item.file_path:
         raise DomainError(404, "upload.not_attached")
-    directory = (data_dir() / "uploads").resolve()
+    directory = (db.info["workspace_dir"] / "uploads").resolve()
     path = (directory / item.file_path).resolve()
     if path.parent != directory or not path.is_file() or path.suffix not in TYPES:
         raise DomainError(404, "upload.missing")

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowDownToLine, ArrowRight, BookOpen, CalendarDays, ChevronLeft, FileUp, FolderOpen, History, KeyRound, ListChecks, Plus, Settings2, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
-import { api, errorText, useApi, type Resource, type Task } from './api'
+import { api, errorText, useApi, workspaceLink, type Resource, type Task } from './api'
 import { ResourceRow, TaskRow } from './pages'
 import { AuditPage, General, Providers } from './settings'
 import { ErrorBox, Field, IconButton, Loading, useWorkspace } from './ui'
@@ -83,7 +83,7 @@ export function WorkspaceCommands({spec,open,close,leave}:{spec:ChatAction;open:
      kind==='upload_resource'?<LocalUpload/>:
      kind==='open_history'?<div className="chat-audit"><AuditPage/></div>:
      kind==='open_planner'?<Link className="primary" to={'/planner'+(spec.view==='backlog'?'?view=today&panel=backlog':spec.view?'?view='+(spec.view==='day'?'today':spec.view):'')} onClick={leave}><CalendarDays size={16}/>打开计划页</Link>:
-     kind==='export_data'?<a className="primary" href="/api/export" download="dayweave-export.json"><ArrowDownToLine size={15}/>导出 JSON</a>:
+     kind==='export_data'?<a className="primary" href={workspaceLink('/api/export')} download="dayweave-export.json"><ArrowDownToLine size={15}/>导出 JSON</a>:
      <Records key={kind} kind={kind as 'manage_tasks'|'manage_projects'|'manage_resources'}/>}
   </section>
 }

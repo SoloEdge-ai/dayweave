@@ -61,21 +61,18 @@ function applyEdits(rows: DraftRow[], edits: Edits) {
   }))
 }
 // Keep unsent keystrokes in this tab until SQLite acknowledges their version.
-function cacheKey(id: number) {
-  return 'dayweave:unsaved-draft:' + id
-}
-function cache(id: number, changes: Edits, version: number) {
+function cache(key: string, changes: Edits, version: number) {
   try {
     if (hasChanges(changes))
-      sessionStorage.setItem(cacheKey(id), JSON.stringify({ changes, version }))
-    else sessionStorage.removeItem(cacheKey(id))
+      sessionStorage.setItem(key, JSON.stringify({ changes, version }))
+    else sessionStorage.removeItem(key)
   } catch {
     /* Draft saving still works with browser storage disabled. */
   }
 }
-function readCache(id: number, version: number): Edits {
+function readCache(key: string, version: number): Edits {
   try {
-    const stored = JSON.parse(sessionStorage.getItem(cacheKey(id)) ?? 'null')
+    const stored = JSON.parse(sessionStorage.getItem(key) ?? 'null')
     return stored?.version === version &&
       stored.changes &&
       typeof stored.changes === 'object'
@@ -106,7 +103,8 @@ export function TaskDraftCard({
   closeAssistant: () => void
 }) {
   const navigate = useNavigate()
-  const { projects, settings, edit, refresh } = useWorkspace()
+  const { projects, settings, edit, refresh, accountId, workspaceId } = useWorkspace()
+  const key = 'dayweave:unsaved-draft:' + accountId + ':' + workspaceId + ':' + event.id
   const zone = settings?.timezone ?? 'Asia/Hong_Kong'
   const [draft, setDraft] = useState(event)
   const server = useRef(event),
@@ -142,10 +140,10 @@ export function TaskDraftCard({
             index: Number(index),
             task,
           })),
-        })
+        }, accountId, workspaceId)
         sent.current = {}
         show(saved)
-        cache(event.id, dirty.current, saved.version)
+        cache(key, dirty.current, saved.version)
       } catch (e) {
         if (server.current.status !== 'pending') {
           sent.current = {}
@@ -153,7 +151,7 @@ export function TaskDraftCard({
         }
         dirty.current = mergeEdits(changes, dirty.current)
         sent.current = {}
-        cache(event.id, dirty.current, server.current.version)
+        cache(key, dirty.current, server.current.version)
         setError(errorText(e))
         setState('error')
         throw e
@@ -174,7 +172,7 @@ export function TaskDraftCard({
   function update(index: number, changes: Partial<DraftFields>) {
     dirty.current = mergeEdits(dirty.current, { [index]: changes })
     cache(
-      event.id,
+      key,
       mergeEdits(sent.current, dirty.current),
       server.current.version,
     )
@@ -249,10 +247,10 @@ export function TaskDraftCard({
   }
   useEffect(() => {
     if (event.status !== 'pending') {
-      cache(event.id, {}, event.version)
+      cache(key, {}, event.version)
       return
     }
-    const recovered = readCache(event.id, event.version)
+    const recovered = readCache(key, event.version)
     if (hasChanges(recovered)) {
       dirty.current = recovered
       show(event)
@@ -268,7 +266,7 @@ export function TaskDraftCard({
         event.version >= server.current.version) {
       clearTimeout(timer.current)
       dirty.current = {}
-      cache(event.id, {}, event.version)
+      cache(key, {}, event.version)
       show(event)
       setError('')
       setState('saved')
@@ -281,10 +279,10 @@ export function TaskDraftCard({
     setError('')
     setBusy(true)
     try {
-      const latest = await api<DraftEvent>(endpoint)
+      const latest = await api<DraftEvent>(endpoint, 'GET', undefined, accountId, workspaceId)
       if (latest.status !== 'pending') {
         dirty.current = {}
-        cache(event.id, {}, latest.version)
+        cache(key, {}, latest.version)
       }
       show(latest)
       await flush()
@@ -311,8 +309,8 @@ export function TaskDraftCard({
         approve,
         version: server.current.version,
         allow_due_conflict: override,
-      })
-      cache(event.id, {}, res.event.version)
+      }, accountId, workspaceId)
+      cache(key, {}, res.event.version)
       show(res.event)
       await refresh()
       settled()

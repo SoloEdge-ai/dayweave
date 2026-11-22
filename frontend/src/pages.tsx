@@ -37,6 +37,7 @@ import {
   projectLabels,
   readablePosition,
   safeUrl,
+  workspaceLink,
   statusLabels,
   timeLabel,
   typeLabels,
@@ -614,7 +615,7 @@ export function ResourceRow({
   compact?: boolean
 }) {
   const { edit, refresh, notify } = useWorkspace(),
-    href = r.file_url || safeUrl(r.url)
+    href = r.file_url ? workspaceLink(r.file_url) : safeUrl(r.url)
   const schedule = () =>
     edit({
       kind: 'task',

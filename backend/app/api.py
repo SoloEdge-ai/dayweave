@@ -154,6 +154,6 @@ def export(db: Session = Depends(get_db)):
     return {"schema_version": 1, "exported_at": now_iso(), "settings": services.get_settings(db),
             "tasks": services.list_tasks(db), "projects": services.list_projects(db),
             "resources": services.list_resources(db),
-            "conversations": [columns(r) for r in db.scalars(select(Conversation).order_by(Conversation.id))],
-            "messages": [columns(r, exclude={"tools"}) for r in db.scalars(select(Message).order_by(Message.id))],
-            "changes": [columns(r) for r in db.scalars(select(TaskChangeLog).order_by(TaskChangeLog.id))]}
+            "conversations": [columns(r, exclude={"account_id"}) for r in db.scalars(select(Conversation).order_by(Conversation.id))],
+            "messages": [columns(r, exclude={"tools", "account_id"}) for r in db.scalars(select(Message).order_by(Message.id))],
+            "changes": list(reversed(services.list_changes(db, limit=None)))}

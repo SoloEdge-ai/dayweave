@@ -4,13 +4,38 @@
 
 应用从同一源提供 API 和前端。JSON 接口直接返回对象或列表。错误响应包含稳定的 `code` 和本地化的 `detail` 字段，字段校验失败时还可能包含 `errors` 数组。登录前，服务端根据 `Accept-Language` 协商错误提示语言。登录后使用工作区语言，后续请求应携带会话 Cookie。浏览器执行写操作时，请求的来源必须与应用匹配。
 
+通过 `X-DayWeave-Workspace` 指定本次请求的工作区，服务端每次核验成员关系。浏览器可携带 `X-DayWeave-Account`，避免另一次登录更换 Cookie 后，旧标签页继续提交。个人偏好与服务商凭据跟随已登录账号。
+
+```mermaid
+sequenceDiagram
+    participant Browser as 浏览器
+    participant API
+    participant Registry as 账号库
+    participant Workspace as 工作区
+    Browser->>API: 用用户名和密码登录
+    API->>Registry: 校验密码哈希并保存会话摘要
+    API-->>Browser: 返回会话 Cookie
+    Browser->>API: 指定工作区请求数据
+    API->>Registry: 核验账号与成员关系
+    alt 是成员
+        API->>Workspace: 查询选中的工作区
+        Workspace-->>Browser: 返回获准的数据
+    else 无成员资格
+        API-->>Browser: 拒绝请求
+    end
+```
+
 ## 工作区接口
 
 | 方法与路径 | 行为 |
 | --- | --- |
 | `GET /api/health` | 验证服务能否查询已迁移的数据库 |
-| `GET /api/auth/status` | 读取当前认证状态 |
-| `POST /api/auth/login`、`POST /api/auth/logout` | 使用密码建立会话或注销当前会话 |
+| `GET /api/auth/status` | 读取 `authenticated`、`signup_enabled` 及已登录账号的公开 ID 和用户名 |
+| `POST /api/auth/register` | 开放注册时，通过用户名和密码创建独立工作区并登录 |
+| `POST /api/auth/login`、`POST /api/auth/logout` | 使用用户名和密码建立会话，或注销当前会话 |
+| `GET, POST /api/workspaces` | 列出可访问的工作区，或创建新工作区 |
+| `GET, POST /api/workspaces/{id}/members` | 所有者列出成员或添加已有用户名 |
+| `DELETE /api/workspaces/{id}/members/{account_id}` | 所有者移除成员 |
 | `GET /api/dashboard/today` | 返回本地日期、重点任务、当天任务、关联资料和提醒分组 |
 | `GET, POST /api/tasks` | 筛选任务或创建任务 |
 | `GET, PATCH, DELETE /api/tasks/{id}` | 读取、编辑或软删除任务 |

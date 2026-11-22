@@ -12,10 +12,10 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.concurrency import run_in_threadpool
 
-from . import api, auth, services
+from . import api, auth, workspaces
 from .ai.router import router as ai_router
 from .ai.voice import MAX_AUDIO, router as voice_router
-from .db import SessionLocal, engine
+from .db import SessionLocal, engine, open_workspace
 from .i18n import DomainError, error_info, normalize_language, request_locale, validation_info
 from .models import Settings
 from .uploads import MAX_UPLOAD
@@ -23,9 +23,8 @@ from .uploads import MAX_UPLOAD
 
 @asynccontextmanager
 async def lifespan(_):
-    auth.initialize_admin()
     with SessionLocal.begin() as db:
-        services.get_settings(db)
+        auth.initialize_accounts(db)
     yield
 
 
@@ -36,7 +35,9 @@ def error_locale(request):
     # Request parsing and the size/origin guard may run before the auth dependency.
     if getattr(request.state, "language", None) is None and request.cookies.get(auth.COOKIE):
         with SessionLocal() as db:
-            if auth.current_session(request, db):
+            workspace = auth.current_workspace(request, db)
+        if workspace:
+            with open_workspace(workspace.workspace_id, workspace.account_id, owner=workspace.owner) as db:
                 settings = db.get(Settings, 1)
                 request.state.language = normalize_language(settings.language if settings else None)
     return request_locale(request)
@@ -44,7 +45,7 @@ def error_locale(request):
 
 def upload_authorized(request):
     with SessionLocal() as db:
-        return auth.current_session(request, db) is not None
+        return auth.current_workspace(request, db) is not None
 
 
 class RequestGuard:
@@ -102,6 +103,7 @@ class RequestGuard:
 
 app.add_middleware(RequestGuard)
 app.include_router(auth.router)
+app.include_router(workspaces.router)
 app.include_router(api.router)
 app.include_router(voice_router)
 app.include_router(ai_router, dependencies=[Depends(auth.require_admin)])
@@ -127,7 +129,7 @@ async def http_error(request: Request, exc):
 @app.get("/api/health")
 def health():
     with engine.connect() as connection:
-        connection.execute(text("SELECT 1 FROM admin LIMIT 1"))
+        connection.execute(text("SELECT 1 FROM accounts LIMIT 1"))
     return {"status": "ok"}
 
 

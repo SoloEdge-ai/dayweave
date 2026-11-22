@@ -39,6 +39,22 @@ The executor requests clarification for ambiguous targets or unresolved dates. I
 
 ## 3. Voice input on a desktop, phone or iPad
 
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant B as Composer
+    participant S as Local speech model
+    participant A as Assistant
+    participant W as Selected workspace
+    U->>B: Record or attach audio
+    B->>S: Transcribe with authorized session
+    S-->>B: Return editable text
+    U->>A: Review and send
+    A->>W: Store private draft
+    U->>W: Confirm edited draft
+    W-->>U: Return task and planner link
+```
+
 The microphone is a composer input. A tap starts recording after browser permission. Elapsed time and an active recording indicator remain visible. A second tap stops capture. The user can play back or discard the clip. Cancel releases the microphone and discards the clip. One recording accepts up to **120 seconds and 20 MiB**. Both the recording control and the receiving service enforce the limits.
 
 The server runs a local multilingual **Whisper small** model using **CPU int8** inference. The deployment image carries a pinned, integrity-checked set of weights. The service authenticates the session, validates the container and decoded duration, bounds concurrent transcription and cleans up temporary server audio when processing completes, fails or is cancelled. It returns editable text. Only **Send** adds the reviewed message to the conversation. Users can edit mixed-language phrases and technical terms. [faster-whisper implementation and CPU inference](https://github.com/SYSTRAN/faster-whisper)

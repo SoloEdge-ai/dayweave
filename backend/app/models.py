@@ -91,6 +91,12 @@ class Settings(Base):
     planning_preferences: Mapped[str] = mapped_column(Text, default="")
 
 
+class CalendarSettings(Base):
+    __tablename__ = "workspace_calendar"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    timezone: Mapped[str] = mapped_column(String(100), default="Asia/Hong_Kong")
+
+
 class TaskChangeLog(Base):
     __tablename__ = "change_log"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -101,17 +107,37 @@ class TaskChangeLog(Base):
     after: Mapped[dict | None] = mapped_column(JSON)
     source: Mapped[str] = mapped_column(String)
     conversation_id: Mapped[int | None] = mapped_column(Integer)
+    actor_id: Mapped[str | None] = mapped_column(String(36), index=True)
     created_at: Mapped[str] = mapped_column(String, default=now_iso)
     undone_at: Mapped[str | None] = mapped_column(String)
 
 
-class Admin(Base):
-    __tablename__ = "admin"
-    id: Mapped[int] = mapped_column(primary_key=True)
+class Account(Base):
+    __tablename__ = "accounts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    username: Mapped[str] = mapped_column(String(48), unique=True)
     password_hash: Mapped[str] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String, default=now_iso)
 
 
-class AdminSession(Base):
-    __tablename__ = "admin_sessions"
-    digest: Mapped[str] = mapped_column(String, primary_key=True)
+class WorkspaceRecord(Base):
+    __tablename__ = "workspaces"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[str] = mapped_column(String, default=now_iso)
+
+
+class WorkspaceMember(Base):
+    __tablename__ = "workspace_members"
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True, index=True)
+    created_at: Mapped[str] = mapped_column(String, default=now_iso)
+
+
+class AccountSession(Base):
+    __tablename__ = "account_sessions"
+    digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[int] = mapped_column(Integer)
     expires_at: Mapped[int] = mapped_column(Integer, index=True)

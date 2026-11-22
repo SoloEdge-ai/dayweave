@@ -8,18 +8,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
+PASSWORD = "disposable-test-password"
 
 @pytest.fixture
 def http(tmp_path, monkeypatch):
     from app import auth, db, main
     monkeypatch.setenv("DAYWEAVE_DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("DAYWEAVE_ADMIN_PASSWORD", raising=False)
+    monkeypatch.setenv("DAYWEAVE_ADMIN_PASSWORD", PASSWORD)
     engine = create_engine(db.sqlite_url(), connect_args={"check_same_thread": False})
     event.listen(engine, "connect", db.configure_sqlite)
     sessions = sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(db, "engine", engine)
     monkeypatch.setattr(main, "engine", engine)
-    for module in (auth, db, main):
+    for module in (db, main):
         monkeypatch.setattr(module, "SessionLocal", sessions)
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     command.upgrade(config, "head")
@@ -30,7 +31,7 @@ def http(tmp_path, monkeypatch):
 
 
 def login(client, root):
-    secret = (root / "admin-password.txt").read_text(encoding="utf-8").strip()
+    secret = PASSWORD
     result = client.post("/api/auth/login", json={"password": secret})
     assert result.status_code == 200
     assert "HttpOnly" in result.headers["set-cookie"]
@@ -100,6 +101,93 @@ def test_http_access_export_and_rollback(http):
     assert client.get("/api/export").status_code == 401
 
 
+def test_accounts_isolate_records_files_settings_and_session_identity(http):
+    from app.main import app
+    first, root = http
+    identity = first.post("/api/auth/register", json={"username": "Alice", "password": "password-for-alice"}).json()["account"]
+    assert identity["username"] == "alice"
+    assert first.post("/api/tasks", json={"title": "Alice only"}).status_code == 201
+    assert first.post("/api/projects", json={"name": "Alice project"}).status_code == 201
+    uploaded = first.post("/api/resources/upload", files={"file": ("private.md", b"Alice attachment")}).json()
+    assert first.patch("/api/settings", json={"language": "ja"}).status_code == 200
+    assert first.patch("/api/ai/providers/compatible", json={"api_key": "alice-private-key"}).status_code == 200
+
+    with TestClient(app) as second:
+        assert second.get("/api/tasks").status_code == 401
+        response = second.post("/api/auth/register", json={"username": "bob", "password": "password-for-bob"})
+        assert response.status_code == 201, response.text
+        assert response.json()["account"]["id"] != identity["id"]
+        for path in ("/api/tasks", "/api/projects", "/api/resources", "/api/changes", "/api/ai/conversations"):
+            assert second.get(path).json() == []
+        assert second.get(uploaded["file_url"]).status_code == 404
+        assert second.get("/api/settings").json()["language"] == "zh-CN"
+        assert not next(row for row in second.get("/api/ai/providers").json() if row["id"] == "compatible")["has_key"]
+        assert second.post("/api/tasks", headers={"X-DayWeave-Account": identity["id"]},
+                           json={"title": "Stale tab write"}).status_code == 401
+        bob_task = second.post("/api/tasks", json={"title": "Bob only"}).json()
+        assert bob_task["id"] == first.get("/api/tasks").json()[0]["id"]
+        assert second.get("/api/export").json()["tasks"][0]["title"] == "Bob only"
+    assert first.get("/api/export").json()["tasks"][0]["title"] == "Alice only"
+    assert first.get(uploaded["file_url"]).content == b"Alice attachment"
+    assert not (root / "admin-password.txt").exists()
+
+
+def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(http, monkeypatch):
+    import json
+    import httpx
+    from app.ai.adapters import Adapter
+    from app.main import app
+
+    def simulate(request):
+        payload = json.loads(request.content)
+        draft = {"index": 0, "id": "task-proposal", "type": "function",
+                 "function": {"name": "create_task", "arguments": '{"title":"Shared assistant task"}'}}
+        choice = {"index": 0, "delta": {"tool_calls": [draft]}, "finish_reason": "tool_calls"} if payload.get("tools") else {
+            "index": 0, "delta": {"content": "Draft prepared."}, "finish_reason": "stop"
+        }
+        return httpx.Response(200, text="data: " + json.dumps({"choices": [choice]}) + "\n\ndata: [DONE]\n\n")
+
+    monkeypatch.setattr(Adapter, "client", lambda self: httpx.Client(transport=httpx.MockTransport(simulate)))
+    alice, _ = http
+    assert alice.post("/api/auth/register", json={"username": "alice", "password": "alice-password-22"}).status_code == 201
+    personal = alice.get("/api/workspaces").json()[0]
+    shared = alice.post("/api/workspaces", json={"name": "Shared work"}).json()
+    assert len(alice.get("/api/workspaces").json()) == 2
+    view = {"X-DayWeave-Workspace": shared["id"]}
+    assert alice.post("/api/tasks", headers=view, json={"title": "Shared task"}).status_code == 201
+    assert alice.get("/api/tasks", headers={"X-DayWeave-Workspace": personal["id"]}).json() == []
+    assert alice.patch("/api/ai/providers/compatible", json={
+        "api_key": "alice-profile-token", "base_url": "https://fixture.example/v1", "model": "shared-fixture",
+    }).status_code == 200
+    with TestClient(app) as bob:
+        actor = bob.post("/api/auth/register", json={"username": "bob", "password": "bob-password-111"}).json()["account"]
+        assert bob.get("/api/tasks", headers=view).status_code == 401
+        assert alice.post(f"/api/workspaces/{shared['id']}/members", json={"username": "bob"}).status_code == 201
+        assert bob.get("/api/tasks", headers=view).json()[0]["title"] == "Shared task"
+        assert bob.post(f"/api/workspaces/{shared['id']}/members", json={"username": "admin"}).status_code == 404
+        alice_providers = alice.get("/api/ai/providers", headers=view).json()
+        bob_providers = bob.get("/api/ai/providers", headers=view).json()
+        assert next(p for p in alice_providers if p["id"] == "compatible")["has_key"]
+        assert not next(p for p in bob_providers if p["id"] == "compatible")["has_key"]
+        reply = alice.post("/api/ai/chat", headers=view, json={
+            "provider": "compatible", "content": "Create a shared task", "request_id": "scoped-request-123",
+        })
+        assert reply.status_code == 200, reply.text
+        frames = [json.loads(line[6:]) for line in reply.text.splitlines() if line.startswith("data: {")]
+        draft = next(event for event in frames if event["type"] == "task_draft")
+        conversation = next(event for event in frames if event["type"] == "conversation")
+        assert bob.get(f"/api/ai/conversations/{conversation['id']}", headers=view).status_code == 404
+        assert bob.get(f"/api/ai/confirmations/{draft['id']}", headers=view).status_code == 404
+        assert bob.get("/api/export", headers=view).json()["messages"] == []
+        assert len(bob.get("/api/tasks", headers=view).json()) == 1
+        approved = alice.post(f"/api/ai/confirmations/{draft['id']}", headers=view,
+                              json={"approve": True, "version": draft["version"]})
+        assert approved.status_code == 200, approved.text
+        assert len(bob.get("/api/tasks", headers=view).json()) == 2
+        assert alice.delete(f"/api/workspaces/{shared['id']}/members/{actor['id']}").status_code == 204
+        assert bob.get("/api/tasks", headers=view).status_code == 401
+
+
 @pytest.mark.parametrize("path", ["/api/ai/transcribe", "/api/resources/upload"])
 def test_authenticated_upload_rejects_before_receiving_body(http, path):
     client, _ = http
@@ -123,7 +211,7 @@ def test_multipart_upload_and_link(http):
     assert upload.status_code == 201, upload.text
     resource = upload.json()
     assert resource["title"] == "学习.pdf" and resource["position_unit"] == "pages"
-    assert len(list((root / "uploads").iterdir())) == 1
+    assert len(list((root / "workspaces").glob("*/uploads/*"))) == 1
     raw = client.get(resource["file_url"])
     assert raw.content == pdf and raw.headers["Content-Type"] == "application/pdf"
     updated = client.patch(f"/api/resources/{resource['id']}", json={"current_position": 3, "total_pages": 10})
@@ -140,7 +228,7 @@ def test_language_negotiation_persistence_and_localized_errors(http):
     headers = {"Accept-Language": "fr-FR, en-US;q=0.7, ja-JP;q=0.95"}
     feedback = client.post("/api/auth/login", headers=headers, json={"password": "incorrect"})
     assert feedback.headers["Content-Language"] == "ja"
-    assert feedback.json() == {"code": "auth.invalid_password", "detail": "管理者パスワードが正しくありません。"}
+    assert feedback.json() == {"code": "auth.invalid_password", "detail": "ユーザー名またはパスワードが正しくありません。"}
     fallback = client.get("/api/tasks", headers={"Accept-Language": "de, en;q=0"})
     assert fallback.json()["detail"] == "请登录 DayWeave"
     login(client, root)

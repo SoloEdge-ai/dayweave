@@ -2,11 +2,12 @@
 
 English · [简体中文](AGENTS.zh-CN.md)
 
-DayWeave is a local-first, single-user planner. The app and assistant support `zh-CN`, `ja` and `en`. Keep repository documentation in parallel English and Simplified Chinese editions. The unsuffixed Markdown file is the English entry point. Use a sibling `.zh-CN.md` file for its translation, with language links on both pages.
+DayWeave is a local-first planner with private and shared workspaces. The app and assistant support `zh-CN`, `ja` and `en`. Keep repository documentation in parallel English and Simplified Chinese editions. The unsuffixed Markdown file is the English entry point. Use a sibling `.zh-CN.md` file for its translation, with language links on both pages.
 
 * `backend/app/` owns authentication, persistence, schedules and validation. `backend/app/ai/` owns provider protocols, local conversation history and tool execution.
 * `frontend/src/` contains the React application. Use API data for production screens. Keep sample records confined to disposable fixtures.
 * `tests/browser/` exercises the built app and produces Playwright previews. Include both iPad orientations when changing navigation or edit interactions.
+* Keep tests focused on behavior across the browser and API boundary. Use Playwright for user flows and a small HTTP suite for access control, persistence and responses the interface relies on. Avoid separate unit tests for implementation helpers and duplicate coverage of the same behavior.
 * `docs/` describes the product, architecture, API, provider setup and roadmap. Deployment and backup instructions are in the root README.
 
 Preserve local calendar dates, exact timestamps and day-part precision. Apply manual and AI writes through the same service. Keep provider credentials and the encryption key out of API responses, logs and source control. Add an Alembic revision when changing persisted schema.

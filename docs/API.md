@@ -4,13 +4,38 @@ English · [简体中文](API.zh-CN.md)
 
 The application serves its API and frontend from the same origin. JSON endpoints return an object or a list directly. Error responses include a stable `code` and a localized `detail`. Field validation errors can include an `errors` array. Before login, the server negotiates error language with `Accept-Language`. Authenticated errors use the workspace language. Use the session cookie on subsequent requests. A browser mutation must have a matching origin.
 
+Send `X-DayWeave-Workspace` to select a workspace for a request. The server verifies membership every time. Browser clients can include `X-DayWeave-Account` to reject a stale tab if the cookie changes after a separate sign-in. Profile settings and provider credentials follow the authenticated account.
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant API
+    participant Registry
+    participant Workspace
+    Browser->>API: Login with username and password
+    API->>Registry: Validate password hash and store session digest
+    API-->>Browser: Send session cookie
+    Browser->>API: Request data with selected workspace
+    API->>Registry: Check account and workspace membership
+    alt Member
+        API->>Workspace: Query selected workspace
+        Workspace-->>Browser: Return authorized data
+    else No membership
+        API-->>Browser: Reject request
+    end
+```
+
 ## Workspace endpoints
 
 | Method and path | Behavior |
 | --- | --- |
 | `GET /api/health` | Verify that the service can query the migrated database |
-| `GET /api/auth/status` | Read the current authentication state |
-| `POST /api/auth/login`, `POST /api/auth/logout` | Start a session with a password or invalidate the current session |
+| `GET /api/auth/status` | Read `authenticated`, `signup_enabled` and the signed-in account's public ID and username |
+| `POST /api/auth/register` | Create a private workspace and sign in with a username and password where registration is enabled |
+| `POST /api/auth/login`, `POST /api/auth/logout` | Start a session with a username and password or invalidate the current session |
+| `GET, POST /api/workspaces` | List accessible workspaces or create another workspace |
+| `GET, POST /api/workspaces/{id}/members` | As owner, list members or add an existing username |
+| `DELETE /api/workspaces/{id}/members/{account_id}` | As owner, remove a member |
 | `GET /api/dashboard/today` | Local date, focus tasks, scheduled tasks, linked resources and reminder groups |
 | `GET, POST /api/tasks` | Filter tasks or create a task |
 | `GET, PATCH, DELETE /api/tasks/{id}` | Read, edit or soft-delete a task |

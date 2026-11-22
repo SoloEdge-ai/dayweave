@@ -14,6 +14,7 @@ import {
 import {
   api,
   errorText,
+  workspaceLink,
   modelLabel,
   useApi,
   type Change,
@@ -493,7 +494,7 @@ export function SettingsPage() {
             快照。上传的文件请使用服务器备份一并保存。
           </p>
           <a
-            href="/api/export"
+            href={workspaceLink('/api/export')}
             className="primary"
             download="dayweave-export.json"
           >

@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db import Base
+from app.db import AccountPrivate, Base
 
 
 def utcnow() -> str:
@@ -25,7 +25,7 @@ class AIProvider(Base):
     catalog: Mapped[list] = mapped_column(JSON, default=list)
 
 
-class Conversation(Base):
+class Conversation(AccountPrivate, Base):
     __tablename__ = "conversations"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -33,7 +33,7 @@ class Conversation(Base):
     created_at: Mapped[str] = mapped_column(default=utcnow)
 
 
-class Message(Base):
+class Message(AccountPrivate, Base):
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -48,7 +48,7 @@ class Message(Base):
     tools: Mapped[list] = mapped_column(JSON, default=list)
 
 
-class ChatTurn(Base):
+class ChatTurn(AccountPrivate, Base):
     """Reserve the user's request before network I/O or domain writes."""
 
     __tablename__ = "ai_turns"
@@ -62,7 +62,7 @@ class ChatTurn(Base):
     message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"))
 
 
-class PendingAction(Base):
+class PendingAction(AccountPrivate, Base):
     __tablename__ = "ai_confirmations"
 
     id: Mapped[int] = mapped_column(primary_key=True)

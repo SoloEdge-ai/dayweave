@@ -2,7 +2,7 @@
 
 [English](README.md) · 简体中文 · [第一版设计与验收标准](docs/V1_DESIGN.zh-CN.md)
 
-织日是用于工作、生活和学习的单人计划工具。在浏览器中管理任务、项目、资料和截止日期，也可以让 AI 助手查询或修改同一份 SQLite 数据。工作区与助手支持简体中文、日语和英语。
+织日用于管理工作、生活和学习计划。用户可在浏览器管理任务、项目、资料和截止日期，也可以让 AI 助手操作选定工作区。工作区与助手支持简体中文、日语和英语。
 
 ## 首次启动
 
@@ -12,10 +12,9 @@
 cp .env.example .env
 docker compose up -d --build
 docker compose ps
-docker compose exec dayweave cat /data/admin-password.txt
 ```
 
-在服务器上打开 [DayWeave 本机入口](http://127.0.0.1:8787)，输入生成的管理员密码。如果希望自行设定密码，请在**首次启动前**将 `.env` 中的 `DAYWEAVE_ADMIN_PASSWORD` 设为至少八个字符，妥善保管该文件。已有数据库会保留原密码。
+在服务器上打开 [DayWeave 本机入口](http://127.0.0.1:8787)，选择**创建账号**。注册时会生成一个个人工作区。在**管理工作区**可以新建工作区，或按用户名添加已注册账号。服务商凭据和模型配置随登录账号使用。所需账号注册后，可设 `DAYWEAVE_ENABLE_SIGNUP=0` 关闭注册。
 
 Compose 将应用后端发布到回环地址，升级旧配置时也适用。开放手机或 iPad 访问前，先验证公司 tailnet 无法通过 IPv4、IPv6、子网路由、Docker 转发，以及 Tailscale Serve 或 Funnel 等代理访问这个个人服务。只要仍有路径未经验证，就继续仅监听回环地址。部署过程无需改动公司的 Tailscale 配置。[网络隔离与验收](docs/V1_DESIGN.zh-CN.md#6-个人局域网与公司-tailscale-的边界)
 
@@ -52,7 +51,7 @@ sh scripts/backup.sh
 验证恢复时请选择未使用的项目名和端口，并使用**全新的** Compose 项目与空数据卷。下面的命令从可信归档恢复，不会修改原卷。
 
 ```sh
-export COMPOSE_PROJECT_NAME=dayweave-recovery
+export COMPOSE_FILE=docker-compose.yml COMPOSE_PROJECT_NAME=dayweave-recovery
 export DAYWEAVE_PORT=18788 DAYWEAVE_COOKIE_SECURE=0
 docker compose build
 docker compose run --rm --no-deps -T dayweave sh -c 'test -z "$(ls -A /data)" && tar -xzf - -C /data' < backups/YOUR-ARCHIVE.tar.gz
@@ -78,6 +77,8 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 做端到端验证时，保持虚拟环境激活，在仓库根目录执行以下命令。测试会自动启动临时工作区，使用独立数据库、随机密码和模拟的外部模型服务。预览示例只写入该临时环境。
+
+Python 测试验证浏览器依赖的 HTTP 行为，包括工作区权限、任务确认、上传和日程写入。浏览器测试通过构建后的应用验证用户操作流程。
 
 ```sh
 cd tests/browser

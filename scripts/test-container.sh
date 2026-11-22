@@ -2,6 +2,7 @@
 # Exercise the built image in its own temporary Compose project and data volume.
 set -eu
 cd "$(dirname "$0")/.."
+export COMPOSE_FILE=docker-compose.yml
 export COMPOSE_PROJECT_NAME="dayweave-test-$(date -u +%s)-$$"
 export DAYWEAVE_PORT=0 DAYWEAVE_COOKIE_SECURE=0 DAYWEAVE_PROXY_IP=127.0.0.1
 export DAYWEAVE_ADMIN_PASSWORD=only-for-the-disposable-container

@@ -12,10 +12,9 @@ Use a Linux host with Docker Engine and Docker Compose. From the project directo
 cp .env.example .env
 docker compose up -d --build
 docker compose ps
-docker compose exec dayweave cat /data/admin-password.txt
 ```
 
-On the server, open [DayWeave on localhost](http://127.0.0.1:8787). Enter the generated administrator password. To select your own initial password, set `DAYWEAVE_ADMIN_PASSWORD` to at least eight characters **before the first launch** and keep the environment file private. Existing databases keep their password on restart.
+On the server, open [DayWeave on localhost](http://127.0.0.1:8787) and choose **Create account**. Registration creates a personal workspace. Use **Manage workspaces** to create more or add an existing account by username. Provider credentials and model settings follow the signed-in account. Set `DAYWEAVE_ENABLE_SIGNUP=0` to close registration after adding the intended accounts.
 
 Compose publishes the backend on loopback, including upgrades from earlier configurations. For phone or iPad access, first verify that the company tailnet cannot reach the personal service over IPv4 or IPv6, through subnet routes, Docker forwarding or a proxy such as Tailscale Serve or Funnel. Keep the deployment loopback-only while any path remains unverified. This setup requires no changes to company Tailscale configuration. [Network isolation and acceptance](docs/V1_DESIGN.md#6-personal-lan-access-and-company-tailnet-exclusion)
 
@@ -52,7 +51,7 @@ The script briefly stops the application, archives the complete volume in `backu
 To test recovery with a **fresh** Compose project and volume, choose an unused project name and port. These commands restore a trusted archive without changing the original volume:
 
 ```sh
-export COMPOSE_PROJECT_NAME=dayweave-recovery
+export COMPOSE_FILE=docker-compose.yml COMPOSE_PROJECT_NAME=dayweave-recovery
 export DAYWEAVE_PORT=18788 DAYWEAVE_COOKIE_SECURE=0
 docker compose build
 docker compose run --rm --no-deps -T dayweave sh -c 'test -z "$(ls -A /data)" && tar -xzf - -C /data' < backups/YOUR-ARCHIVE.tar.gz
@@ -78,6 +77,8 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 For end-to-end tests, keep the virtual environment active and run the following from the repository root. A disposable app starts automatically with a separate database, a random password and a simulated remote provider. Preview records are created only inside that fixture:
+
+The Python suite covers the HTTP behavior the browser relies on, including workspaces, confirmation, uploads and schedule writes. The browser suite covers the visible workflows against the built app.
 
 ```sh
 cd tests/browser

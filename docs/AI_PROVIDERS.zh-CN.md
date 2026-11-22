@@ -25,21 +25,21 @@ DayWeave 将会话、设置、变更回执和待审操作保存在本地 SQLite 
 
 **接入资格。** OpenAI 在 2026 年 11 月的文档中介绍了面向开源本地应用和部分获批私有客户端的接入流程。具备资格的 Plus/Pro 用户需要授权相应工作区。个人使用局域网服务器或已购买订阅，不会自动取得应用接入资格。请检查实际部署是否符合官方开源条件，或是否已获得 OpenAI 私有客户端批准。本仓库本身不等于官方批准。运营者需主动启动授权并明确确认资格，应用不会静默注册。参阅[官方快速入门](https://developers.openai.com/siwc/quickstart)与[开源应用注册说明](https://developers.openai.com/siwc/token-sharing-open-source)。
 
-**浏览器与 VM。** 官方回环回调到达运行浏览器的电脑，授权助手应在这台电脑执行。服务器独立生成稳定的主机 ID 和传输密钥，随后生成的短期凭据封装只能由该服务器解密。助手检验返回的 state、动态客户端 ID、PKCE 交换、获批作用域和签名身份信息，其中包括签发者、受众、有效期及 nonce。再次登录时，浏览器所在电脑会复用同一已验证的客户端和账号身份。该单用户版本在服务器保留一个有效服务商账号。参阅[官方注册与登录流程](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)和[自托管 VM 指南](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)。
+**浏览器与 VM。** 官方回环回调到达运行浏览器的电脑，授权助手应在这台电脑执行。服务器独立生成稳定的主机 ID 和传输密钥，随后生成的短期凭据封装只能由该服务器解密。助手检验返回的 state、动态客户端 ID、PKCE 交换、获批作用域和签名身份信息，其中包括签发者、受众、有效期及 nonce。再次登录时，浏览器所在电脑会复用同一已验证的客户端和账号身份。每个 DayWeave 账号有自己的服务商连接，切换工作区时仍使用该账号的配置。参阅[官方注册与登录流程](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)和[自托管 VM 指南](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)。
 
 在打开浏览器的电脑准备一份 DayWeave 源码，并安装 Python 3.11 以上版本及后端依赖。将示例中的 SSH 主机别名 `dayweave-server` 和项目路径 `/srv/dayweave` 替换为实际部署值。以下 PowerShell 命令通过 SSH 连接已有 Compose 部署。生成的第一个文件是公开的接收端描述；第二个文件仅能在指定的服务器上解密，请在十分钟内导入。
 
 ```powershell
-ssh dayweave-server 'cd /srv/dayweave && docker compose exec -T dayweave python -m app.ai.oauth prepare' | Set-Content -Encoding utf8 recipient.json
+ssh dayweave-server 'cd /srv/dayweave && docker compose exec -T dayweave python -m app.ai.oauth prepare --username YOUR_USERNAME' | Set-Content -Encoding utf8 recipient.json
 python -m venv .venv-siwc
 .\.venv-siwc\Scripts\python -m pip install -r backend/requirements.txt
 Push-Location backend
 ..\.venv-siwc\Scripts\python -m app.ai.oauth login --eligible --recipient ../recipient.json --out ../dayweave-registration.json
 Pop-Location
-Get-Content -Raw dayweave-registration.json | ssh dayweave-server 'cd /srv/dayweave && docker compose exec -T dayweave python -m app.ai.oauth import'
+Get-Content -Raw dayweave-registration.json | ssh dayweave-server 'cd /srv/dayweave && docker compose exec -T dayweave python -m app.ai.oauth import --username YOUR_USERNAME'
 ```
 
-Linux 浏览器电脑可在 `backend/` 中使用虚拟环境的 Python 运行同一助手。可通过输入重定向传输加密封装，例如 `ssh SERVER 'cd PROJECT && docker compose exec -T dayweave python -m app.ai.oauth import' < dayweave-registration.json`。生成的接收端描述和注册封装均应保存在 Git 之外。导入后在设置使用 **ChatGPT → 测试连接**，加载当前账号可见的模型标识和显示名称。模型推理要求授权包含 `chatgpt.tokens.use.direct` 作用域。基础登录成功但缺少该权限时，应用会提示权限要求。模型目录读取失败时，服务商保持未连接状态。
+Linux 浏览器电脑可在 `backend/` 中使用虚拟环境的 Python 运行同一助手。可通过输入重定向传输加密封装，例如 `ssh SERVER 'cd PROJECT && docker compose exec -T dayweave python -m app.ai.oauth import --username YOUR_USERNAME' < dayweave-registration.json`。生成的接收端描述和注册封装均应保存在 Git 之外。导入后在设置使用 **ChatGPT → 测试连接**，加载当前账号可见的模型标识和显示名称。模型推理要求授权包含 `chatgpt.tokens.use.direct` 作用域。基础登录成功但缺少该权限时，应用会提示权限要求。模型目录读取失败时，服务商保持未连接状态。
 
 推理适配器发送包含显式历史消息的无状态 Responses 流式请求，通过命名空间组织本地函数，并验证流的终止事件。模型目录访问和实际推理分别验证。凭据存储层通过 SQLite 串行刷新，并将轮换后的凭据一起替换；Web API 不返回令牌。点击**断开授权**会请求撤销刷新令牌并清理本地访问。如果无法连接远端撤销端点，界面会注明远端撤销状态未确认；剩余访问可在 ChatGPT 设置中管理。参阅[模型与推理](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)、[预览限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)、[刷新与撤销](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)和 [ChatGPT 用量](https://chatgpt.com/settings/usage)。
 

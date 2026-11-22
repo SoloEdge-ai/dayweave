@@ -4,7 +4,50 @@ English · [简体中文](ARCHITECTURE.zh-CN.md)
 
 ## Deployment
 
-A multi-stage image builds React with Node and runs FastAPI on Python. Uvicorn serves the REST API, the chat event stream and the compiled frontend from one origin. A single process owns the SQLite workload. The named Compose volume at `/data` holds the database, uploads, bootstrap administrator password and provider encryption key. The initial application is empty.
+A multi-stage image builds React with Node and runs FastAPI on Python. Uvicorn serves the REST API, the chat event stream and the compiled frontend from one origin. A single process owns the SQLite workload. The Compose volume at `/data` holds the account registry, workspace databases, uploads and the provider encryption key. The initial installation has no accounts or records unless an operator provisions an account.
+
+## Accounts and storage isolation
+
+Accounts and workspaces have separate UUIDs. Registration creates a personal workspace. An account can create additional workspaces and join shared workspaces. Owners add and remove members. A workspace owns its tasks, projects, resources and calendar timezone. An account's provider credentials, model defaults and other personal preferences follow it across workspaces. Conversations and pending actions are private to the account that created them within the selected workspace.
+
+```mermaid
+erDiagram
+    ACCOUNT ||--o{ ACCOUNT_SESSION : authenticates
+    ACCOUNT ||--o{ WORKSPACE : owns
+    ACCOUNT ||--o{ WORKSPACE_MEMBER : joins
+    WORKSPACE ||--o{ WORKSPACE_MEMBER : admits
+    ACCOUNT ||--|| ACCOUNT_PROFILE : stores
+    WORKSPACE ||--o{ TASK : contains
+    WORKSPACE ||--o{ RESOURCE : contains
+    ACCOUNT ||--o{ CONVERSATION : starts
+    WORKSPACE ||--o{ CONVERSATION : scopes
+    CONVERSATION ||--o{ MESSAGE : contains
+    CONVERSATION ||--o{ PENDING_ACTION : proposes
+```
+
+The server checks membership using the signed-in session and selected workspace. Browser requests carry the account and workspace that opened the view. A stale tab with a different account's cookie cannot apply its pending edits. Files are resolved only through resource records in the selected workspace database.
+
+```mermaid
+flowchart LR
+    B["React<br/>Account + workspace selection"] --> H["Caddy<br/>LAN HTTPS"]
+    H --> F["FastAPI<br/>Session and membership"]
+    F --> I[("Account registry<br/>Accounts, sessions, membership")]
+    F --> W[("Selected workspace<br/>Tasks, resources, audit")]
+    F --> P[("Current account profile<br/>Encrypted provider credentials and preferences")]
+    W --> U["Workspace uploads"]
+    F --> A["Scoped assistant<br/>Selected workspace and current account"]
+    A --> T["Provider adapter and local tools"]
+```
+
+The registry stores versioned salted scrypt hashes and SHA-256 digests of random session tokens. SQLite stores the registry, each workspace and each account profile in separate files under `/data`. A cloud deployment can preserve their IDs and replace these storage boundaries with a registry database, database-enforced tenancy, workspace-scoped object storage and managed keys. It also needs a shared rate limiter and signup and recovery policies for its environment.
+
+```mermaid
+flowchart LR
+    L["Single-process SQLite deployment"] --> R["Preserve account IDs, workspace IDs and membership"]
+    R --> D["Cloud candidate<br/>Database-enforced workspace and account isolation"]
+    U["Workspace file directories"] --> O["Workspace-scoped object storage"]
+    K["Local encryption key"] --> M["Managed key service"]
+```
 
 ## Request flow
 
@@ -32,7 +75,7 @@ Calendar dates are local dates. An exact instant includes an offset on input and
 | `task_resources`, `resource_projects` | Many-to-many associations |
 | `change_log` | Object identity, operation, before/after snapshots, origin, conversation and undo state |
 | `user_settings` | Locale, timezone, theme, provider and planning defaults |
-| `admin`, `admin_sessions` | Password hash and expiring session-token digests |
+| `accounts`, `workspaces`, `account_sessions` | Global identity registry, workspace ownership, password hashes and expiring session-token digests |
 | `ai_providers` | Endpoint, model, capability catalog, connection status and encrypted credential |
 | `conversations`, `messages` | Local transcripts, provider/model identity and tool records |
 | `ai_turns`, `ai_confirmations` | Request deduplication, editable draft payloads, revision numbers, confirmation state and applied results |
