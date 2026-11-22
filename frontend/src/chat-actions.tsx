@@ -1,3 +1,5 @@
+import { LayoutControls, type Pane } from './pane-layout'
+import { useWorkspaceDialogs } from './workspaces'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowDownToLine, ArrowRight, BookOpen, CalendarDays, ChevronLeft, FileUp, FolderOpen, History, KeyRound, ListChecks, Plus, Settings2, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
@@ -6,11 +8,11 @@ import { ResourceRow, TaskRow } from './pages'
 import { AuditPage, General, Providers } from './settings'
 import { ErrorBox, Field, IconButton, Loading, useWorkspace } from './ui'
 
-type NativeName='upload_resource'|'provider_credentials'|'chatgpt_authorize'|'chatgpt_disconnect'|'export_data'|'open_planner'|'open_history'|'open_settings'
-type LocalName=NativeName|'menu'|'manage_tasks'|'manage_projects'|'manage_resources'
-export type ChatAction={action:LocalName;provider?:string;view?:string}
-const nativeNames:NativeName[]=['upload_resource','provider_credentials','chatgpt_authorize','chatgpt_disconnect','export_data','open_planner','open_history','open_settings']
-const providerIds=['deepseek','openai','compatible','chatgpt']
+type NativeName='upload_resource'|'provider_credentials'|'chatgpt_authorize'|'chatgpt_disconnect'|'export_data'|'open_planner'|'open_history'|'open_settings'|'create_workspace'|'manage_workspace'|'open_board'
+type LocalName=NativeName|'layout'|'menu'|'manage_tasks'|'manage_projects'|'manage_resources'
+export type ChatAction={action:LocalName;provider?:string;view?:string;pane?:Pane;pixels?:number}
+const nativeNames:NativeName[]=['upload_resource','provider_credentials','chatgpt_authorize','chatgpt_disconnect','export_data','open_planner','open_history','open_settings','create_workspace','manage_workspace','open_board']
+const providerIds=['deepseek','openai','compatible','chatgpt','codex']
 export function allowedAction(result:unknown):ChatAction|null {
   if(!result||typeof result!=='object')return null
   const data=result as Record<string,unknown>
@@ -20,22 +22,35 @@ export function allowedAction(result:unknown):ChatAction|null {
   return {action:data.action as NativeName,provider,view}
 }
 const names:Record<LocalName,string>={
-  menu:'工作区操作',manage_tasks:'任务管理',manage_projects:'项目',manage_resources:'资料库',
+  create_workspace:'创建工作区',manage_workspace:'管理工作区',open_board:'任务看板',
+  layout:'栏目宽度',menu:'工作区操作',manage_tasks:'任务管理',manage_projects:'项目',manage_resources:'资料库',
   upload_resource:'上传资料',provider_credentials:'配置 AI 服务商',chatgpt_authorize:'连接 ChatGPT',chatgpt_disconnect:'断开 ChatGPT',
   export_data:'导出工作区',open_planner:'计划页',open_history:'变更记录',open_settings:'工作区偏好',
 }
 export const actionName=(action:ChatAction)=>names[action.action]
 const entries: [LocalName,LucideIcon][]=[
-  ['manage_tasks',ListChecks],['open_planner',CalendarDays],['manage_projects',FolderOpen],['manage_resources',BookOpen],
-  ['upload_resource',FileUp],['open_settings',Settings2],['provider_credentials',KeyRound],['open_history',History],['export_data',ArrowDownToLine],
+  ['manage_tasks',ListChecks],['open_board',ListChecks],['manage_workspace',Settings2],['open_planner',CalendarDays],['manage_projects',FolderOpen],['manage_resources',BookOpen],
+  ['upload_resource',FileUp],['layout',SlidersHorizontal],['open_settings',Settings2],['provider_credentials',KeyRound],['open_history',History],['export_data',ArrowDownToLine],
 ]
 export function secretInComposer(text:string){
   return /(?:\bsk-[a-zA-Z0-9_-]{8,}|\bBearer\s+[a-zA-Z0-9._-]{12,}|(?:api[ _-]?key|密钥|金鑰|キー|password|token)\s*(?:[:：=]|是|は)\s*\S{4,})/i.test(text)
 }
 // Local commands remain usable before the first provider has been set up.
 export function localCommand(text:string,offline:boolean):ChatAction|null{
-  const provider=/deepseek/i.test(text)?'deepseek':/compatible|兼容|互換/i.test(text)?'compatible':/chatgpt/i.test(text)?'chatgpt':/openai/i.test(text)?'openai':undefined
+  const provider=/codex/i.test(text)?'codex':/deepseek/i.test(text)?'deepseek':/compatible|兼容|互換/i.test(text)?'compatible':/chatgpt/i.test(text)?'chatgpt':/openai/i.test(text)?'openai':undefined
   if(secretInComposer(text)||/(?:设置|设定|配置|更换|输入|填写|configure|set up|enter|connect|replace|設定|入力).{0,24}(?:api[\s_-]?key|密钥|服务商|provider|プロバイダ|キー)/i.test(text))return {action:'provider_credentials',provider}
+  if (/(?:导航|助手|侧栏|看板|待安排|待办|进行中|已完成|已取消|栏目|分栏).{0,14}(?:宽|窄)|(?:ペイン|サイドバー|カラム|列).{0,6}幅|(?:pane|column|sidebar|assistant).{0,18}(?:width|wider|narrower)|(?:resize|widen|narrow).{0,18}(?:pane|column|sidebar|assistant)/i.test(text)) {
+    const pane: Pane = /导航|navigation|ナビ/i.test(text) ? 'navigation' : /待安排|backlog|バックログ/i.test(text) ? 'backlog' :
+      /进行中|in progress|進行中/i.test(text) ? 'in_progress' : /已完成|completed|完了/i.test(text) ? 'done' :
+      /已取消|cancelled|キャンセル/i.test(text) ? 'cancelled' : /待办|to do|未着手/i.test(text) ? 'todo' : 'assistant'
+    const number = text.match(/\d{2,4}/u)
+    return {action:'layout',pane,pixels:number ? Number(number[0]) : undefined}
+  }
+  if(provider==='codex' && /(?:模型|モデル|models?)/i.test(text))return {action:'provider_credentials',provider:'codex'}
+  if(provider==='codex' && /login|log.?in|sign.?in|connect|登录|登錄|授权|断开|接続|ログイン/i.test(text))return {action:'provider_credentials',provider:'codex'}
+  if(/(?:创建|新建|建立).{0,7}工作区|(?:create|new) (?:a |an? new )?workspace|ワークスペース.{0,5}(?:新規|作成)/i.test(text))return {action:'create_workspace'}
+  if(/管理工作区|manage workspaces?|ワークスペース管理/i.test(text))return {action:'manage_workspace'}
+  if(/^(?:打开|查看|open |show )?(?:任务看板|task board|看板|ボード)(?:を開く)?[。.!！]?$/i.test(text.trim()))return {action:'open_board'}
   if(!offline&&!text.startsWith('/'))return null
   if(/chatgpt/i.test(text)&&/断开|disconnect|解除/i.test(text))return {action:'chatgpt_disconnect',provider:'chatgpt'}
   if(/chatgpt/i.test(text)&&/授权|连接|connect|sign.?in|認証|接続/i.test(text))return {action:'chatgpt_authorize',provider:'chatgpt'}
@@ -74,12 +89,16 @@ function Records({kind}:{kind:'manage_tasks'|'manage_projects'|'manage_resources
   </div>
 }
 export function WorkspaceCommands({spec,open,close,leave}:{spec:ChatAction;open:(a:ChatAction)=>void;close:()=>void;leave:()=>void}) {
+  const openWorkspace = useWorkspaceDialogs()
   const {settings}=useWorkspace(),kind=spec.action,account=kind==='chatgpt_authorize'||kind==='chatgpt_disconnect'
   const provider=account?'chatgpt':spec.provider??settings?.default_provider??'deepseek'
   return <section className="local-commands" aria-label="工作区操作"><header><div>{kind==='menu'?<SlidersHorizontal size={18}/>:<IconButton icon={ChevronLeft} label="返回操作列表" onClick={()=>open({action:'menu'})}/>}<h2>{actionName(spec)}</h2></div><IconButton icon={X} label="返回对话" onClick={close}/></header>
     {kind==='menu'?<div className="command-menu">{entries.map(([id,Icon])=><button key={id} onClick={()=>open({action:id})}><Icon size={17}/><span>{names[id]}</span><ArrowRight size={14}/></button>)}</div>:
+     kind==='layout'?<LayoutControls key={String(spec.pane)+String(spec.pixels)} initial={spec.pane} pixels={spec.pixels}/>:
      kind==='open_settings'?settings?<General settings={settings}/>:<Loading/>:
      kind==='provider_credentials'||account?<><p className="private-note"><KeyRound size={14}/>凭据仅提交到本地设置，不进入对话。</p><Providers key={provider} initial={provider} guideOpen={kind==='chatgpt_authorize'}/></>:
+     kind==='create_workspace'||kind==='manage_workspace'?<button className="primary" onClick={()=>openWorkspace(kind==='create_workspace'?'create':'manage')}>{actionName(spec)}<ArrowRight size={15}/></button>:
+     kind==='open_board'?<Link className="primary" to="/board" onClick={leave}>任务看板<ArrowRight size={15}/></Link>:
      kind==='upload_resource'?<LocalUpload/>:
      kind==='open_history'?<div className="chat-audit"><AuditPage/></div>:
      kind==='open_planner'?<Link className="primary" to={'/planner'+(spec.view==='backlog'?'?view=today&panel=backlog':spec.view?'?view='+(spec.view==='day'?'today':spec.view):'')} onClick={leave}><CalendarDays size={16}/>打开计划页</Link>:

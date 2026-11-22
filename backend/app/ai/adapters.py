@@ -12,6 +12,7 @@ DEFAULTS = {
     "deepseek": ("DeepSeek", "https://api.deepseek.com", "deepseek-flash"),
     "openai": ("OpenAI API", "https://api.openai.com/v1", "gpt-5.4"),
     "compatible": ("OpenAI 兼容接口", "", ""),
+    "codex": ("Codex", "codex://app-server", ""),
     "chatgpt": ("ChatGPT", "https://api.openai.com/v1", ""),
 }
 
@@ -22,7 +23,7 @@ class ProviderError(Exception):
 
 def efforts(provider, model, catalog=()):
     item = next((m for m in catalog if m["id"] == model), {})
-    if provider == "chatgpt":
+    if provider in {"chatgpt", "codex"}:
         return ["auto", *[v for v in item.get("efforts", []) if v != "auto"]]
     if provider == "deepseek" and model in {
         "deepseek-flash",
@@ -75,6 +76,42 @@ class Round:
     text: str = ""
     calls: list[Call] = field(default_factory=list)
     wire: list[dict] = field(default_factory=list)
+    usage: dict | None = None
+
+    def report_usage(self, raw, input_key, output_key, total_key):
+        if not isinstance(raw, dict):
+            return
+        def count(key):
+            value = raw.get(key)
+            return value if type(value) is int and value >= 0 else None
+        inputs, outputs, total = (count(key) for key in (input_key, output_key, total_key))
+        if total is None and inputs is not None and outputs is not None:
+            total = inputs + outputs
+        if total is not None:
+            self.usage = {"total_tokens": total, "input_tokens": inputs, "output_tokens": outputs}
+
+
+class TurnUsage:
+    def __init__(self, previous):
+        self.previous = previous
+        self.rounds = []
+
+    def start(self):
+        current = Round()
+        self.rounds.append(current)
+        return current
+
+    def snapshot(self):
+        reports = [r.usage for r in self.rounds]
+        if self.previous:
+            reports.insert(0, self.previous)
+        known = [r for r in reports if r is not None]
+        if not known:
+            return None
+        result = {"partial": len(known) < len(reports) or any(r.get("partial", False) for r in known)}
+        for key in ("input_tokens", "output_tokens", "total_tokens"):
+            result[key] = sum(r[key] for r in known) if all(r.get(key) is not None for r in known) else None
+        return result
 
 
 class Adapter:
@@ -135,11 +172,17 @@ class Adapter:
     def _events(self, path, body):
         try:
             with self.client() as client:
-                for attempt in range(2):
+                transient_retry = True
+                while True:
                     with client.stream("POST", self.base_url + path, json=body) as resp:
                         if not resp.is_success:
                             resp.read()
-                            if resp.status_code in (502, 503, 504) and not attempt:
+                            if (self.provider == "compatible" and "stream_options" in body
+                                    and resp.status_code in (400, 422) and "stream_options" in resp.text):
+                                body = {k: v for k, v in body.items() if k != "stream_options"}
+                                continue
+                            if resp.status_code in (502, 503, 504) and transient_retry:
+                                transient_retry = False
                                 time.sleep(0.35)
                                 continue
                             raise safe_error(resp)
@@ -172,6 +215,7 @@ class Adapter:
         payload = {
             "model": model,
             "stream": True,
+            "stream_options": {"include_usage": True},
             "messages": [{"role": "system", "content": instructions}, *history],
         }
         if functions:
@@ -186,6 +230,7 @@ class Adapter:
                 payload["reasoning_effort"] = reasoning
         calls, reasoning_trace, finished = {}, "", False
         for event in self._events("/chat/completions", payload):
+            result.report_usage(event.get("usage"), "prompt_tokens", "completion_tokens", "total_tokens")
             if event.get("error"):
                 raise ProviderError("服务商报告生成失败。")
             for choice in event.get("choices", []):
@@ -253,6 +298,8 @@ class Adapter:
         complete = False
         for event in self._events("/responses", payload):
             kind = event.get("type")
+            if kind in ("response.completed", "response.incomplete", "response.failed"):
+                result.report_usage((event.get("response") or {}).get("usage"), "input_tokens", "output_tokens", "total_tokens")
             if kind == "response.output_text.delta":
                 result.text += event["delta"]
                 yield event["delta"]

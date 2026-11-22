@@ -132,9 +132,12 @@ def migrate_storage(directory: Path, *, create=False):
 def get_db(request: Request):
     from .auth import request_workspace
 
+    from .services import release_elapsed_days
+
     access = request_workspace(request)
     with open_workspace(access.workspace_id, access.account_id, owner=access.owner) as session:
         try:
+            release_elapsed_days(session)
             yield session
             session.commit()
         except BaseException:

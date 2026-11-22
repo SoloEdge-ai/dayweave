@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium, webkit, devices } from 'playwright'
+import { checkCodexPicker, checkDesktopLayout, checkTabletLayout } from './layout.mjs'
 import { call, fixture } from './session.mjs'
 
 const languageControl = /^(界面语言|Language|言語)/
@@ -26,11 +27,37 @@ function audioFixture() {
   return { name: 'fixture.wav', mimeType: 'audio/wav', buffer: Buffer.concat([header, pcm]) }
 }
 
+async function checkDailyRollover(page, today, width) {
+  const api = page.context().request
+  const yesterday = new Date(Date.parse(today + 'T12:00Z') - 86400000).toISOString().slice(0,10)
+  const title = 'Continue document ' + width
+  const task = await call(api, 'POST', '/tasks', {title, status:'in_progress', scheduled_date:yesterday, scheduled_period:'afternoon', due_date:today, due_period:'evening'})
+  await page.goto('/planner?view=today&date=' + yesterday)
+  const old = page.locator('.planner-day .past-plan').filter({hasText:title})
+  await old.getByText('安排过', {exact:true}).waitFor()
+  assert.equal(await old.getByRole('button').count(), 0)
+  await page.goto('/planner?view=today&panel=backlog')
+  await page.getByRole('complementary', {name:'待安排'}).getByRole('button', {name:new RegExp(title)}).tap()
+  await page.getByRole('button', {name:/^排入 ·/}).tap()
+  const editor = page.getByRole('dialog', {name:'编辑安排'})
+  await editor.getByRole('button', {name:'保存安排'}).tap()
+  await editor.waitFor({state:'hidden'})
+  await page.getByRole('button', {name:'完成任务 · ' + title, exact:true}).tap()
+  await page.getByText('任务已完成', {exact:true}).waitFor()
+  const saved = await call(api, 'GET', '/tasks/' + task.id)
+  assert.deepEqual([saved.status,saved.scheduled_date,saved.due_period],['done',today,'evening'])
+  await page.goto('/planner?view=today&date=' + yesterday)
+  await old.getByText('安排过', {exact:true}).waitFor()
+}
+
 async function checkVoicePlanner(page, date, tomorrow, width, height) {
   const request = page.context().request
   const title = 'iPad voice planner ' + width
   const tasks = () => call(request, 'GET', '/tasks?q=' + encodeURIComponent(title))
   const originalIds = (await call(request, 'GET', '/tasks')).map(task => task.id)
+  await page.goto('/')
+  await page.getByRole('link', { name: '用语音创建任务' }).tap()
+  await page.getByRole('button', { name: '选择音频', exact: true }).waitFor()
   await page.goto('/planner?view=tomorrow')
   await page.getByRole('heading', { name: '日程编排', exact: true }).waitFor()
   await page.getByRole('button', { name: '打开织日助手' }).tap()
@@ -50,7 +77,20 @@ async function checkVoicePlanner(page, date, tomorrow, width, height) {
   const card = page.getByRole('region', { name: '任务草稿' }).last()
   assert.equal(await card.getByLabel('任务标题', { exact: true }).inputValue(), '机器人跟踪')
   await card.getByLabel('任务标题', { exact: true }).fill(title)
-  await card.getByLabel('计划日期', { exact: true }).fill(tomorrow)
+  const tagSelect = card.getByLabel('标签', {exact:true})
+  await tagSelect.selectOption({label:'Studio ' + width})
+  await card.getByRole('button', {name:'移除标签 · Studio ' + width,exact:true}).tap()
+  await tagSelect.selectOption({label:'Studio ' + width})
+  await tagSelect.selectOption('new')
+  const newTag = 'Milestone ' + width
+  await card.getByLabel('新标签名称').fill(newTag)
+  await card.getByRole('button', {name:'添加',exact:true}).tap()
+  assert.ok(!(await call(request, 'GET', '/tags')).some(tag => tag.name === newTag))
+  if (process.env.DAYWEAVE_TAG_PREVIEWS) {
+    await card.locator('.tag-picker').scrollIntoViewIfNeeded()
+    await page.screenshot({ path: process.env.DAYWEAVE_TAG_PREVIEWS + '/tags-' + width + '.png', scale:'css' })
+  }
+  await card.getByLabel('计划范围', { exact:true }).selectOption('tomorrow')
   await card.getByLabel('截止日期', { exact: true }).fill(tomorrow)
   assert.deepEqual((await call(request, 'GET', '/tasks')).map(task => task.id), originalIds)
   if (process.env.DAYWEAVE_VOICE_SCREENSHOTS === '1') {
@@ -60,11 +100,13 @@ async function checkVoicePlanner(page, date, tomorrow, width, height) {
   await card.getByRole('button', { name: '在日历查看', exact: true }).tap()
   await page.locator('.planner-day').getByText(title, { exact: true }).waitFor()
   const [created] = await tasks()
+  assert.deepEqual(created.tags, ['Studio ' + width, newTag])
+  assert.ok((await call(request, 'GET', '/tags')).some(tag => tag.name === newTag))
   assert.equal(created.scheduled_date, tomorrow)
   assert.equal(created.due_date, tomorrow)
   await page.getByRole('button', { name: '编辑安排 · ' + title }).tap()
   const editor = page.getByRole('dialog', { name: '编辑安排' })
-  await editor.getByLabel('计划日期', { exact: true }).fill(date)
+  await editor.getByRole('button', { name: '今天', exact: true }).tap()
   await editor.getByLabel('计划时段', { exact: true }).selectOption('exact')
   await editor.getByLabel('计划开始', { exact: true }).fill('14:00')
   await editor.getByLabel('计划结束', { exact: true }).fill('15:00')
@@ -126,6 +168,12 @@ async function checkVoicePlanner(page, date, tomorrow, width, height) {
   const weekdays = await page.locator('.planner-weekday').allTextContents()
   assert.equal(weekdays[0], '周一')
   assert.equal(weekdays[6], '周日')
+  const heading = page.locator('.planner-panel header h2').first()
+  const originalRange = await heading.textContent()
+  await page.getByRole('button', { name: '后一周' }).tap()
+  await page.waitForFunction(text => document.querySelector('.planner-panel header h2')?.textContent !== text, originalRange)
+  await page.getByRole('button', { name: '前一周' }).tap()
+  await page.getByRole('heading', { name: originalRange, exact: true }).waitFor()
   console.log('PASS WebKit ' + width + 'x' + height + ': transcription, draft, confirmation, exact time, floating month, Monday week and undo')
 }
 const copies = {
@@ -188,6 +236,12 @@ async function checkAccountIsolation(page, app, firstTasks) {
   await page.getByRole('button', { name: '退出登录' }).click()
   await page.getByRole('button', { name: '创建账号', exact: true }).click()
   await page.locator('input[autocomplete=username]').fill('second-user')
+  const email = 'second-user@example.org'
+  await page.getByLabel('邮箱', { exact: true }).fill(email)
+  await page.getByRole('button', { name: '发送验证码' }).click()
+  await page.getByText('验证码邮件未能确认发送，请重试。', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '发送验证码', exact: true }).click()
+  await page.getByLabel('邮箱验证码').fill(await app.receivedCodes(email, 1))
   await page.locator('input[type=password]').fill('separate-fixture-password')
   await page.getByRole('button', { name: '注册并登录' }).click()
   await page.getByRole('heading', { name: '今日总览' }).waitFor()
@@ -204,9 +258,10 @@ async function checkAccountIsolation(page, app, firstTasks) {
   assert.deepEqual((await call(page.request, 'GET', '/tasks')).map(t => t.title), firstTasks.map(t => t.title))
   assert.ok((await call(page.request, 'GET', '/ai/conversations')).length)
   await page.getByRole('button', { name: '管理工作区' }).click()
+  await page.getByRole('button', { name: '新建工作区' }).click()
   await page.getByLabel('工作区名称').fill('Shared browser workspace')
   await page.getByRole('button', { name: '创建工作区' }).click()
-  await page.getByRole('dialog', { name: '管理工作区' }).waitFor({ state: 'hidden' })
+  await page.getByRole('dialog', { name: '创建工作区' }).waitFor({ state: 'hidden' })
   const spaces = await call(page.request, 'GET', '/workspaces')
   const shared = spaces.find(row => row.name === 'Shared browser workspace')
   assert.ok(shared)
@@ -219,8 +274,14 @@ async function checkAccountIsolation(page, app, firstTasks) {
   await page.getByRole('textbox', { name: '快捷录入' }).press('Enter')
   await page.getByText('任务已放入收件箱', { exact: true }).waitFor()
   await page.getByRole('button', { name: '退出登录' }).click()
-  await page.locator('input[autocomplete=username]').fill('second-user')
-  await page.locator('input[type=password]').fill('separate-fixture-password')
+  await page.getByRole('button', { name: '忘记密码？' }).click()
+  await page.getByLabel('邮箱', { exact: true }).fill(email)
+  await page.getByRole('button', { name: '发送验证码' }).click()
+  await page.getByLabel('邮箱验证码').fill(await app.receivedCodes(email, 2))
+  await page.locator('input[type=password]').fill('replacement-fixture-password')
+  await page.getByRole('button', { name: '重设密码' }).click()
+  await page.getByText('密码已更新，请重新登录。').waitFor()
+  await page.locator('input[type=password]').fill('replacement-fixture-password')
   await page.getByRole('button', { name: '进入工作区' }).click()
   const switcher = page.getByRole('combobox', { name: '切换工作区' })
   await switcher.selectOption({ label: shared.name })
@@ -254,6 +315,7 @@ async function checkWorkspaceLocales(page, api) {
     await page.getByRole('button', { name: labels.newTask, exact: true }).first().click()
     const editor = page.getByRole('dialog', { name: labels.newTask })
     await editor.getByLabel(labels.title, { exact: true }).fill('Unsubmitted bilingual record')
+    await editor.getByRole('combobox').filter({has:page.locator('option[value="next_week"]')}).selectOption('date')
     assert.equal(await editor.getByLabel(labels.date, { exact: true }).getAttribute('type'), 'date')
     assert.equal(await editor.getByLabel(labels.due, { exact: true }).getAttribute('type'), 'date')
     assert.equal(await editor.getByLabel(labels.minutes, { exact: true }).getAttribute('type'), 'number')
@@ -350,6 +412,7 @@ try {
   await page.locator('input[type=password]').press('Enter')
   await page.getByRole('heading', { name: '今日总览' }).waitFor()
   const api = page.context().request
+  await checkDesktopLayout(page)
   const { date } = await call(api, 'GET', '/dashboard/today')
   const tomorrow = new Date(Date.parse(date + 'T12:00Z') + 86400000).toISOString().slice(0, 10)
   await page.getByRole('textbox', { name: '快捷录入' }).fill('Browser acceptance task')
@@ -357,7 +420,7 @@ try {
   await page.getByText('任务已放入收件箱', { exact: true }).waitFor()
   await page.goto('/tasks/inbox')
   await page.getByRole('button', { name: '编辑“Browser acceptance task”' }).click()
-  await page.getByLabel('计划日期', { exact: true }).fill(tomorrow)
+  await page.getByLabel('计划范围', { exact:true }).selectOption('tomorrow')
   await page.getByRole('button', { name: '保存任务' }).click()
   await page.getByRole('dialog').waitFor({ state: 'hidden' })
   await page.goto('/tasks/tomorrow')
@@ -378,7 +441,7 @@ try {
   await page.getByRole('button', { name: '保存资料' }).click()
   await page.getByRole('dialog').waitFor({ state: 'hidden' })
   await page.getByRole('button', { name: '安排阅读或观看' }).click()
-  await page.getByLabel('计划日期', { exact: true }).fill(date)
+  await page.getByLabel('计划范围', { exact:true }).selectOption('today')
   await page.getByRole('button', { name: '保存任务' }).click()
   await page.getByRole('dialog').waitFor({ state: 'hidden' })
   await page.goto('/tasks/today')
@@ -407,9 +470,12 @@ try {
   await page.getByRole('textbox', { name: '给织日助手发消息' }).fill('测试当前连接')
   await page.getByRole('button', { name: '发送', exact: true }).click()
   await page.getByText('本地测试连接成功。', { exact: true }).waitFor()
+  await page.getByText('本轮用量 · 80 tokens', {exact:true}).waitFor()
   const [conversation] = await call(api, 'GET', '/ai/conversations')
   const history = await call(api, 'GET', '/ai/conversations/' + conversation.id)
-  assert.ok(history.messages.some(m => m.content === '本地测试连接成功。'))
+  assert.deepEqual(history.messages.at(-1).token_usage, {total_tokens:80, input_tokens:64, output_tokens:16, partial:false})
+  await page.reload()
+  await page.getByText('本轮用量 · 80 tokens', {exact:true}).waitFor()
   console.log('PASS provider setup, model catalog, streamed chat and persistent transcript with a local simulator')
 
   await page.getByRole('button', { name: '新建对话', exact: true }).click()
@@ -512,6 +578,7 @@ try {
 
   const tabletBrowser = await webkit.launch()
   try {
+    await checkCodexPicker(tabletBrowser, app)
     for (const [width, height] of [[820, 1180], [1180, 820]]) {
       const tablet = await tabletBrowser.newContext({
         ...devices['iPad (gen 11)'], viewport: { width, height }, storageState: await page.context().storageState(),
@@ -519,6 +586,7 @@ try {
       })
       const touch = await tablet.newPage()
       await touch.goto('/')
+      await checkTabletLayout(touch, width)
       await touch.getByRole('button', { name: '打开织日助手' }).tap()
       await touch.getByRole('button', { name: '收起助手' }).tap()
       if (width === 820) await touch.getByRole('button', { name: '打开导航' }).tap()
@@ -527,6 +595,9 @@ try {
       await edit.tap()
       const dialog = touch.getByRole('dialog', { name: '编辑任务' })
       await dialog.waitFor()
+      await dialog.getByLabel('标签', {exact:true}).selectOption('new')
+      await dialog.getByLabel('新标签名称').fill('Studio ' + width)
+      await dialog.getByRole('button', {name:'添加',exact:true}).tap()
       await dialog.getByRole('combobox', { name: /^优先级/ }).selectOption(width === 820 ? 'high' : 'low')
       if (width === 820) {
         await touch.setViewportSize({ width: 610, height: 660 })
@@ -543,14 +614,55 @@ try {
       await touch.getByText(width === 820 ? '任务已完成' : '任务已重新打开', { exact: true }).waitFor()
       const [record] = await call(tablet.request, 'GET', '/tasks?view=all&q=Browser%20video')
       assert.equal(record.status, width === 820 ? 'done' : 'todo')
+      assert.ok(record.tags.includes('Studio ' + width))
       assert.equal(record.priority, width === 820 ? 'high' : 'low')
+      await touch.goto('/board')
+      const lane = touch.locator('.board-column.state-in_progress')
+      const boardTitle = 'Touch board ' + width
+      await lane.getByRole('button', { name: /添加任务/ }).tap()
+      await lane.getByLabel('任务标题').fill(boardTitle)
+      await lane.getByRole('button', { name: '添加', exact: true }).tap()
+      await lane.getByRole('button', {name: new RegExp(boardTitle)}).tap()
+      await dialog.getByLabel('任务名称', {exact:true}).fill(boardTitle + ' edited')
+      await dialog.getByLabel('计划范围', {exact:true}).selectOption(width === 820 ? 'week' : 'month')
+      await dialog.getByLabel('截止日期', {exact:true}).fill('2030-12-31')
+      await dialog.getByLabel('截止时段', {exact:true}).selectOption('evening')
+      await dialog.getByRole('button', {name:'保存任务'}).tap()
+      await dialog.waitFor({state:'hidden'})
+      await touch.getByRole('searchbox', {name:'搜索任务'}).fill(boardTitle)
+      await touch.getByRole('group', {name:'任务布局'}).getByRole('button', {name:'列表'}).tap()
+      await touch.getByText(boardTitle + ' edited', {exact:true}).waitFor()
+      const [planned] = await call(tablet.request, 'GET', '/tasks?q=' + encodeURIComponent(boardTitle))
+      assert.equal(planned.status, 'in_progress')
+      assert.equal(planned.planning_window, width === 820 ? 'week' : 'month')
+      assert.equal(planned.scheduled_date, null)
+      assert.equal(planned.due_period, 'evening')
+      assert.equal(planned.due_at, null)
+      if (width === 820) assert.equal(new Date(planned.window_start + 'T12:00Z').getUTCDay(), 1)
+      else assert.equal(planned.window_start.slice(-2), '01')
       await checkVoicePlanner(touch, date, tomorrow, width, height)
+      await checkDailyRollover(touch, date, width)
       await tablet.close()
       console.log('PASS WebKit touch task editor and checkbox at ' + width + 'x' + height)
     }
   } finally {
     await tabletBrowser.close()
   }
+  await page.goto('/chat')
+  const composer = page.getByRole('textbox', {name:'给织日助手发消息'})
+  await composer.fill('登录 Codex')
+  await page.getByRole('button', {name:'发送', exact:true}).click()
+  await page.getByRole('button', {name:'用 Codex 登录'}).waitFor()
+  assert.ok(await page.getByRole('combobox', {name:/^默认模型/}).isDisabled())
+  await page.getByText('如何开启设备代码登录？', {exact:true}).click()
+  assert.equal(await page.getByRole('link', {name:'打开 ChatGPT'}).getAttribute('href'), 'https://chatgpt.com/')
+  await page.getByRole('button', {name:'返回对话'}).click()
+  await composer.fill('创建工作区')
+  await page.getByRole('button', {name:'发送', exact:true}).click()
+  await page.getByRole('region', {name:'工作区操作'}).getByRole('button', {name:'创建工作区'}).click()
+  await page.getByRole('dialog', {name:'创建工作区'}).getByLabel('工作区名称').waitFor()
+  await page.keyboard.press('Escape')
+  console.log('PASS account settings and workspace creation from chat')
   await checkWorkspaceLocales(page, api)
   await checkAccountIsolation(page, app, await call(api, 'GET', '/tasks'))
   assert.deepEqual(faults, [])

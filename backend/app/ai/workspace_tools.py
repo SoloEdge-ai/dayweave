@@ -13,7 +13,7 @@ from app.models import Project, Resource, TaskChangeLog
 from app.records import active
 from .adapters import DEFAULTS, efforts
 
-Provider = Literal["openai", "deepseek", "compatible", "chatgpt"]
+Provider = Literal["openai", "deepseek", "compatible", "chatgpt", "codex"]
 
 
 class Params(BaseModel):
@@ -93,7 +93,7 @@ class ProviderOptions(ProviderChoice):
 
 class WorkspaceAction(Params):
     action: Literal["upload_resource", "provider_credentials", "chatgpt_authorize", "chatgpt_disconnect",
-                    "export_data", "open_planner", "open_history", "open_settings"]
+                    "export_data", "open_planner", "open_history", "open_settings", "open_board", "create_workspace", "manage_workspace"]
     provider: Provider | None = None
     view: Literal["backlog", "day", "week", "next_week", "month"] | None = None
 
@@ -113,7 +113,7 @@ DEFINITIONS = {
     "list_provider_models": (ProviderModels, "Read the account model catalog, and available reasoning settings for the requested model."),
     "test_provider": (ProviderChoice, "Propose testing a configured provider and refreshing its account model catalog."),
     "configure_provider": (ProviderOptions, "Propose changes to provider name, enabled state, model and reasoning. Use provider_credentials UI for keys and endpoints."),
-    "open_workspace_action": (WorkspaceAction, "Show a local, click-to-operate action card. Use for uploads, credential/endpoint setup, OAuth setup/disconnect, export, planner, history or settings. Never request secrets or filesystem paths in chat."),
+    "open_workspace_action": (WorkspaceAction, "Show a local, click-to-operate action card. Use for uploads, credential/endpoint setup, OAuth setup/disconnect, export, boards, planner, workspace creation/membership, history or settings. Never request secrets or filesystem paths in chat."),
 }
 READ = {"get_settings","get_project","get_resource","list_changes","list_providers","list_provider_models","open_workspace_action"}
 CONFIRM = {"update_settings","delete_project","delete_resource","undo_change","configure_provider","test_provider"}

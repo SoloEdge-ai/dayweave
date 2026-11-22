@@ -10,11 +10,16 @@ Use a Linux host with Docker Engine and Docker Compose. From the project directo
 
 ```sh
 cp .env.example .env
+vi .env  # Configure SMTP and the sender address
 docker compose up -d --build
 docker compose ps
 ```
 
 On the server, open [DayWeave on localhost](http://127.0.0.1:8787) and choose **Create account**. Registration creates a personal workspace. Use **Manage workspaces** to create more or add an existing account by username. Provider credentials and model settings follow the signed-in account. Set `DAYWEAVE_ENABLE_SIGNUP=0` to close registration after adding the intended accounts.
+
+Set `DAYWEAVE_SMTP_HOST`, `DAYWEAVE_SMTP_PORT`, `DAYWEAVE_SMTP_SECURITY` (`starttls` or `tls`), `DAYWEAVE_MAIL_FROM` and your relay's `DAYWEAVE_SMTP_USER` and `DAYWEAVE_SMTP_PASSWORD` in the private server environment. Use the provider's SMTP app password when required. Register with a username, password, email and the eight-digit code sent to that address. Sign in using the username or email. **Forgot password?** verifies the registered address and ends every existing session after the password changes.
+
+This development release starts with a fresh data volume when upgrading an installation with pre-email accounts. Point Compose at a new storage volume before the first start. An existing nonempty account registry is detected before its schema changes.
 
 Compose publishes the backend on loopback, including upgrades from earlier configurations. For phone or iPad access, first verify that the company tailnet cannot reach the personal service over IPv4 or IPv6, through subnet routes, Docker forwarding or a proxy such as Tailscale Serve or Funnel. Keep the deployment loopback-only while any path remains unverified. This setup requires no changes to company Tailscale configuration. [Network isolation and acceptance](docs/V1_DESIGN.md#6-personal-lan-access-and-company-tailnet-exclusion)
 
@@ -24,7 +29,15 @@ The [host Caddy configuration](scripts/Caddyfile.lan) listens on a single IPv4 a
 
 Use quick capture to put an unscheduled task in the inbox. Open it to set a project, priority, planned time or deadline. Add a video or document in the library, then use its schedule action to create a linked task. The dashboard combines today's work, focus tasks, resources and deadline reminders. Choose a language at login or in workspace settings. Timezone, theme and model defaults are independent preferences.
 
+Drag the dividers beside navigation, the assistant, the planner backlog or individual board columns. With a keyboard, focus a divider and use the arrow keys. Enter restores automatic sizing. You can also ask the assistant to “set the assistant sidebar width to 520 pixels” and apply the suggested width. This browser remembers widths for each account and fits them to the available space when the device rotates.
+
+In the task editor or assistant draft, choose Today or Tomorrow for a particular day. This Week, Next Week and This Month leave the execution day open. A deadline has its own date and optional time of day. Each assistant reply shows the provider-reported token total, including the calls needed to read project data or prepare a draft.
+
+An unfinished task returns to the backlog after its assigned day in the workspace timezone. An overnight time block stays scheduled through its end date. The calendar keeps the earlier assignment as **Previously planned**. Plan the same task again or choose **Complete task** to finish it. Its status, project and deadline survive rollover. Week and month plans stay open until you choose a day.
+
 **Planner** pairs the backlog with Today, Tomorrow, This Week, Next Week or This Month. Weeks run Monday through Sunday. A task can stay in a week or month until a day is chosen. Select a scheduled task to edit its time, move it to the inbox or undo the change. [Interactive planner design](docs/design/planner.html?lang=en)
+
+In **Settings → AI providers → Codex**, connect your account, choose a default model from its catalog, select a supported reasoning level and save. The same settings are available from chat.
 
 AI is optional. Add credentials in provider settings, test the connection and select a model. ChatGPT plan authorization uses a separate operator workflow and depends on official eligibility. See the [provider guide](docs/AI_PROVIDERS.md).
 
@@ -103,3 +116,5 @@ Run `sh scripts/test-container.sh` on a Docker host to exercise database migrati
 * [REST API and chat events](docs/API.md)
 * [AI provider setup and official authorization](docs/AI_PROVIDERS.md)
 * [Delivery status and roadmap](docs/ROADMAP.md)
+
+* [Tablet interface research and Playwright previews](docs/INTERFACE_RESEARCH.md)

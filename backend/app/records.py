@@ -42,6 +42,7 @@ def columns(row, *, exclude=()):
 def snapshot(row):
     result = columns(row, exclude={"deleted", "file_path"})
     if isinstance(row, Task):
+        result["tags"] = sorted((tag.name for tag in row.tags), key=lambda name: (name != row.category, name.casefold()))
         result["resource_ids"] = sorted(r.id for r in row.resources if not r.deleted)
     if isinstance(row, Resource):
         result["project_ids"] = sorted(p.id for p in row.projects if not p.deleted)
@@ -55,7 +56,7 @@ KINDS = {Task: "task", Resource: "resource", Project: "project"}
 def audit(db, row, action, before, after, source, conversation_id):
     entry = TaskChangeLog(
         entity_type=KINDS[type(row)], entity_id=row.id, action=action, before=before,
-        after=after, source=source, conversation_id=conversation_id, actor_id=db.info.get("account_id"),
+        after=after, source=source, conversation_id=conversation_id, actor_id=None if source == "calendar" else db.info.get("account_id"),
     )
     db.add(entry)
     db.flush()

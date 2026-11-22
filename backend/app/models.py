@@ -56,6 +56,20 @@ class Resource(Record, Base):
     projects: Mapped[list[Project]] = relationship(secondary=resource_projects, order_by=Project.id)
 
 
+class Tag(Base):
+    __tablename__ = "tags"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(300))
+    name_key: Mapped[str] = mapped_column(String, unique=True)
+
+
+task_tags = Table(
+    "task_tags", Base.metadata,
+    Column("task_id", ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True, index=True),
+)
+
+
 class Task(Record, Base):
     __tablename__ = "tasks"
     title: Mapped[str] = mapped_column(String(500))
@@ -72,9 +86,11 @@ class Task(Record, Base):
     planned_start_at: Mapped[str | None] = mapped_column(String)
     planned_end_at: Mapped[str | None] = mapped_column(String)
     due_date = mapped_column(Date, nullable=True, index=True)
+    due_period: Mapped[str | None] = mapped_column(String)
     due_at: Mapped[str | None] = mapped_column(String, index=True)
     completed_at: Mapped[str | None] = mapped_column(String)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    tags: Mapped[list[Tag]] = relationship(secondary=task_tags, order_by=Tag.id, lazy="selectin")
     resources: Mapped[list[Resource]] = relationship(secondary=task_resources, order_by=Resource.id)
 
 
@@ -116,6 +132,7 @@ class Account(Base):
     __tablename__ = "accounts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     username: Mapped[str] = mapped_column(String(48), unique=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, default=now_iso)
 
@@ -141,3 +158,13 @@ class AccountSession(Base):
     account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[int] = mapped_column(Integer)
     expires_at: Mapped[int] = mapped_column(Integer, index=True)
+
+
+class EmailChallenge(Base):
+    __tablename__ = "email_challenges"
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    purpose: Mapped[str] = mapped_column(String(16), primary_key=True)
+    digest: Mapped[str] = mapped_column(String(64))
+    issued_at: Mapped[int] = mapped_column(Integer, index=True)
+    delivery_state: Mapped[str] = mapped_column(String(16), default="submitted", server_default="submitted")
+    attempts: Mapped[int] = mapped_column(Integer)

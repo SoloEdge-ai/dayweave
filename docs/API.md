@@ -30,9 +30,11 @@ sequenceDiagram
 | Method and path | Behavior |
 | --- | --- |
 | `GET /api/health` | Verify that the service can query the migrated database |
-| `GET /api/auth/status` | Read `authenticated`, `signup_enabled` and the signed-in account's public ID and username |
-| `POST /api/auth/register` | Create a private workspace and sign in with a username and password where registration is enabled |
-| `POST /api/auth/login`, `POST /api/auth/logout` | Start a session with a username and password or invalidate the current session |
+| `GET /api/auth/status` | Read `authenticated`, `signup_enabled` and the signed-in account's ID, username and verified email |
+| `POST /api/auth/email-code` | Send `email` and `purpose` (`register` or `reset`). The endpoint waits for the relay before returning 202. Existing and unknown addresses receive the same acceptance body. A relay failure returns 503 and permits an immediate retry. An overlapping request still awaiting submission returns 409. |
+| `POST /api/auth/register` | Send `username`, `email`, `password` (10 or more characters), and the emailed `code` as an eight-digit string. Creates the account, personal workspace and session. |
+| `POST /api/auth/reset-password` | Send `email`, the reset `code` and a new `password`. Success returns 204 and revokes all sessions for that account. |
+| `POST /api/auth/login`, `POST /api/auth/logout` | Sign in by passing a username or email in `username` with the password, or invalidate the current session. |
 | `GET, POST /api/workspaces` | List accessible workspaces or create another workspace |
 | `GET, POST /api/workspaces/{id}/members` | As owner, list members or add an existing username |
 | `DELETE /api/workspaces/{id}/members/{account_id}` | As owner, remove a member |
@@ -52,6 +54,8 @@ sequenceDiagram
 | `GET /api/export` | Export portable business data and transcripts as JSON |
 
 Use `view=inbox|today|tomorrow|week|next_week|month|upcoming|all|completed` on the task list. Optional filters include `q`, `project_id`, `category`, `priority`, `status`, `scheduled_date` and `due_date`. Deletes require `?confirm=true`. A schedule/deadline conflict returns HTTP 409. An intentional exception can be saved with `allow_due_conflict: true` after a user decision.
+
+Read historical assignments with `GET /api/planner/history?start=YYYY-MM-DD&end=YYYY-MM-DD`. Dates are inclusive and at most 62 days apart. Each row has the original task ID and `is_past_plan: true`. On the first workspace access after the assigned day, the server records the expired plan and releases its task to the backlog in one transaction. The calendar uses the workspace timezone. Completed tasks retain their last scheduled date.
 
 To reserve a task for an undetermined day in a week, send `{"expected_updated_at":"<current task.updated_at>","planning_window":"week","window_start":"2026-11-23"}` to the schedule endpoint. For a month use `"planning_window":"month"` and its first date, such as `2026-12-01`. For an exact day, supply `scheduled_date` and optional `scheduled_period`, `planned_start_at` or `planned_end_at`. Use the timestamp from the returned task for subsequent changes. A stale timestamp prevents overwriting newer work.
 
@@ -87,11 +91,20 @@ Send the example to `POST /api/tasks`. To complete its returned ID, send `{"stat
 | `PATCH /api/ai/confirmations/{id}/draft` | Save changed task-draft fields and return the new revision |
 | `POST /api/ai/confirmations/{id}` | Approve or cancel. Task drafts require the reviewed `version` with the decision |
 | `GET /api/ai/chatgpt/guide`, `POST /api/ai/chatgpt/disconnect` | Retrieve official setup guidance or disconnect the registration |
+| `POST /api/ai/codex/login`, `GET /api/ai/codex/login`, `POST /api/ai/codex/disconnect` | Start or poll device login for the current account, or remove its local Codex grant. Pending responses include a private verification URL and user code. |
 
-A chat request includes `content` and a unique `request_id`. Optional fields include `provider`, `model`, `reasoning` and `conversation_id`. Reuse a request ID only for the same request. Each SSE frame has a JSON `data` object with a `type` field. Common types are `conversation`, `delta`, `tool`, `task_draft`, `confirmation`, `error` and `done`.
+A chat request includes `content` and a unique `request_id`. Optional fields include `provider`, `model`, `reasoning` and `conversation_id`. Reuse a request ID only for the same request. Each SSE frame has a JSON `data` object with a `type` field. Common types are `conversation`, `delta`, `tool`, `task_draft`, `confirmation`, `usage`, `error` and `done`.
+
+Each `usage` event is a cumulative snapshot for this user turn. Read `usage.total_tokens`, `input_tokens`, `output_tokens` and `partial`. A partial total covers only calls with a provider report. Missing breakdowns or unavailable usage are null. The final snapshot is stored as `token_usage` on the assistant message and reused on replay. The task field `due_period` accepts `morning`, `afternoon` or `evening` alongside `due_date`. Exact deadlines use `due_at`.
 
 ### Editable task drafts
 
 1. A `task_draft` event contains a proposal `id`, `version`, `status`, `conflict` flag and a `drafts` array. Each item supplies the original `index`, proposed `task` fields and optional `resource` metadata. The task and any proposed new resource are still pending.
 2. To edit the first item in version 1, send `{"version":1,"drafts":[{"index":0,"task":{"title":"Prepare notes","estimated_minutes":45}}]}` to `PATCH /api/ai/confirmations/{id}/draft`. Use the revision returned by the server for the next request. A stale revision returns HTTP 409. The edited card is persisted in the transcript.
 3. To create the task, post `{"approve":true,"version":2}` with the actual current revision. If the reviewed schedule conflicts with its deadline, the user can explicitly set `allow_due_conflict:true`. To cancel, send `{"approve":false,"version":2}`. The response contains `status`, `result` and the updated `event`. Approved items include their saved `task_id`; the task list is unchanged after cancellation.
+
+### Workspace tags
+
+`GET /api/tags` lists the workspace catalog. `POST /api/tags` accepts `{"name":"Design"}` and returns the existing or newly created tag with its ID. Names are trimmed and compared case-insensitively. Workspaces maintain independent catalogs.
+
+Task writes accept `tags` as an array of names. An explicit array replaces the selection, including an empty array to clear it. The legacy `category` field exposes the first tag. Use `GET /api/tasks?category=Design` to match any attached tag. Draft edits stage new names until confirmation. The assistant can also create or list standalone tags.

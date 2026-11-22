@@ -16,8 +16,10 @@ from sqlalchemy.orm import Session
 
 from .db import get_db, get_identity_db, migrate_storage, profile_dir, stored_session, workspace_dir
 from . import db as storage
-from .i18n import DomainError, normalize_language
+from .i18n import DomainError, normalize_language, request_locale
 from .models import Account, AccountSession, Settings, WorkspaceMember, WorkspaceRecord
+from . import email_codes
+from .email_codes import Code, Email, Purpose
 from .records import lock_for_write
 from .schemas import Input
 
@@ -33,13 +35,18 @@ def derive_password(password, salt):
     return hashlib.scrypt(password.encode(), salt=salt, n=2**15, r=8, p=1, dklen=32, maxmem=64*1024**2)
 
 
-def add_account(db, username, password):
+def password_hash(password):
+    salt = secrets.token_bytes(16)
+    return f"scrypt$v1${salt.hex()}${derive_password(password, salt).hex()}"
+
+
+def add_account(db, username, email, password):
     lock_for_write(db)
     if db.scalar(select(Account.id).where(Account.username == username)):
         raise DomainError(409, "auth.username_taken")
-    salt = secrets.token_bytes(16)
-    account = Account(id=str(uuid4()), username=username,
-                      password_hash=f"scrypt$v1${salt.hex()}${derive_password(password, salt).hex()}")
+    if db.scalar(select(Account.id).where(Account.email == email)):
+        raise DomainError(409, "auth.email_taken")
+    account = Account(id=str(uuid4()), username=username, email=email, password_hash=password_hash(password))
     db.add(account)
     db.flush()
     initialize_profile(account.id, create=True)
@@ -62,11 +69,6 @@ def initialize_accounts(db):
         migrate_storage(workspace_dir(workspace_id))
     for account_id in db.scalars(select(Account.id)):
         initialize_profile(account_id)
-    initial_password = os.getenv("DAYWEAVE_ADMIN_PASSWORD")
-    if initial_password and not db.scalar(select(Account.id).limit(1)):
-        if len(initial_password) < 8:
-            raise RuntimeError("The bootstrap password must contain at least eight characters.")
-        add_account(db, "admin", initial_password)
 
 
 def initialize_profile(account_id, *, create=False):
@@ -142,7 +144,7 @@ def status_for(account):
     return {
         "authenticated": account is not None,
         "signup_enabled": signup_enabled(),
-        "account": {"id": account.id, "username": account.username} if account else None,
+        "account": {"id": account.id, "username": account.username, "email": account.email} if account else None,
     }
 
 
@@ -153,13 +155,23 @@ def status(request: Request, db: Session = Depends(get_identity_db)):
 
 
 class Login(Input):
-    username: Username = "admin"
+    username: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320)] = "admin"
     password: str = Field(min_length=1, max_length=1024)
 
 
-class Register(Input):
-    username: Username
+class EmailRequest(Input):
+    email: Email
+    purpose: Purpose
+
+
+class PasswordWithCode(Input):
+    email: Email
+    code: Code
     password: str = Field(min_length=10, max_length=1024)
+
+
+class Register(PasswordWithCode):
+    username: Username
 
 
 def attempt(request, operation):
@@ -193,19 +205,50 @@ def start_session(account, request, response, db):
     return status_for(account)
 
 
+@router.post("/email-code", status_code=202)
+def request_code(body: EmailRequest, request: Request, db: Session = Depends(get_identity_db)):
+    if body.purpose == "register" and not signup_enabled():
+        raise DomainError(403, "auth.signup_disabled")
+    attempt(request, "email-code")
+    email_codes.issue(db, body.email, body.purpose, request_locale(request))
+    return {"accepted": True}
+
+
+@router.post("/reset-password", status_code=204)
+def reset_password(body: PasswordWithCode, request: Request, db: Session = Depends(get_identity_db)):
+    attempt(request, "reset-password")
+    email_codes.consume(db, body.email, "reset", body.code)
+    account = db.scalar(select(Account).where(Account.email == body.email))
+    if not account:
+        raise DomainError(400, "auth.invalid_code")
+    account.password_hash = password_hash(body.password)
+    db.execute(delete(AccountSession).where(AccountSession.account_id == account.id))
+    db.commit()
+
+
 @router.post("/register", status_code=201)
 def register(body: Register, request: Request, response: Response, db: Session = Depends(get_identity_db)):
     if not signup_enabled():
         raise DomainError(403, "auth.signup_disabled")
     attempt(request, "signup")
-    account = add_account(db, body.username, body.password)
+    email_codes.consume(db, body.email, "register", body.code)
+    account = add_account(db, body.username, body.email, body.password)
     return start_session(account, request, response, db)
 
 
 @router.post("/login")
 def login(body: Login, request: Request, response: Response, db: Session = Depends(get_identity_db)):
-    key = attempt(request, "login:" + body.username)
-    account = db.scalar(select(Account).where(Account.username == body.username))
+    identifier = body.username.lower()
+    column = Account.username
+    if "@" in identifier:
+        column = Account.email
+        try:
+            identifier = email_codes.normalize_email(identifier)
+        except ValueError:
+            pass
+    key = attempt(request, "login:" + identifier)
+    lock_for_write(db)
+    account = db.scalar(select(Account).where(column == identifier))
     expected = f"scrypt$v1${'00' * 16}${'00' * 32}"
     if account and account.password_hash.startswith("scrypt$v1$"):
         expected = account.password_hash

@@ -4,11 +4,32 @@ English · [简体中文](ARCHITECTURE.zh-CN.md)
 
 ## Deployment
 
-A multi-stage image builds React with Node and runs FastAPI on Python. Uvicorn serves the REST API, the chat event stream and the compiled frontend from one origin. A single process owns the SQLite workload. The Compose volume at `/data` holds the account registry, workspace databases, uploads and the provider encryption key. The initial installation has no accounts or records unless an operator provisions an account.
+A multi-stage image builds React with Node and runs FastAPI on Python. Uvicorn serves the REST API, the chat event stream and the compiled frontend from one origin. A single process owns the SQLite workload. The Compose volume at `/data` holds the account registry, workspace databases, uploads and the provider encryption key. A new installation starts empty. The first user registers with a verified email.
 
 ## Accounts and storage isolation
 
 Accounts and workspaces have separate UUIDs. Registration creates a personal workspace. An account can create additional workspaces and join shared workspaces. Owners add and remove members. A workspace owns its tasks, projects, resources and calendar timezone. An account's provider credentials, model defaults and other personal preferences follow it across workspaces. Conversations and pending actions are private to the account that created them within the selected workspace.
+
+Email addresses are normalized and unique in the identity registry. It stores a keyed digest for each address and purpose. Codes expire after ten minutes or five incorrect guesses. An address can receive a replacement code after one minute. Verification and its resulting identity change share one database transaction. The reset response ends the flow at the login screen.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App
+    participant Registry
+    participant SMTP
+    User->>App: Request a registration or recovery code
+    App->>Registry: Reserve an address and purpose challenge
+    App-->>User: Acknowledge request
+    App->>SMTP: Deliver code to eligible address
+    User->>App: Submit code and account details
+    App->>Registry: Verify and consume code
+    alt Register
+        App->>Registry: Create account, workspace and session
+    else Reset password
+        App->>Registry: Replace password hash and revoke all sessions
+    end
+```
 
 ```mermaid
 erDiagram

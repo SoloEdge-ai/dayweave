@@ -16,6 +16,8 @@ def week_bounds(day):
 def merge_schedule(previous, changes):
     """An exact slot, a period-only plan, and the inbox are mutually exclusive."""
     fields = dict(changes)
+    if fields.get("due_at") or ("due_date" in fields and not fields["due_date"]):
+        fields.setdefault("due_period", None)
     if fields.get("planning_window"):
         for key in ("scheduled_date", "scheduled_period", "planned_start_at", "planned_end_at"):
             fields.setdefault(key, None)
@@ -42,5 +44,9 @@ def apply_time_rules(task, zone: str, check_due=True):
     deadline = task.due_date or (task.due_at and task.due_at.astimezone(tz).date())
     scheduled_end = task.planned_end_at or task.planned_start_at
     scheduled_day = scheduled_end.astimezone(tz).date() if scheduled_end else task.scheduled_date or task.window_start
+    periods = ("morning", "afternoon", "evening")
+    if (scheduled_day == deadline and task.scheduled_period and task.due_period and not scheduled_end
+            and periods.index(task.scheduled_period) > periods.index(task.due_period)):
+        raise DomainError(409, "time.due_conflict")
     if (deadline and scheduled_day > deadline) or (scheduled_end and task.due_at and scheduled_end > task.due_at):
         raise DomainError(409, "time.due_conflict")

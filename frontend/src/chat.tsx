@@ -28,6 +28,7 @@ import {
   type ModelCatalog,
   workspaceHeaders,
 } from './api'
+import { useSearchParams } from 'react-router-dom'
 import { Emblem, ErrorBox, IconButton, useWorkspace } from './ui'
 import { TaskDraftCard, type DraftEvent } from './draft'
 import { WorkspaceCommands, actionName, allowedAction, localCommand, type ChatAction } from './chat-actions'
@@ -48,7 +49,19 @@ function isDraft(tool:ToolItem):tool is ToolItem & DraftEvent {
 function lastConversation(storageKey: string){
   try{const value=Number(sessionStorage.getItem(storageKey));return Number.isSafeInteger(value)&&value>0?value:null}catch{return null}
 }
+type TokenUsage = { total_tokens:number; input_tokens:number|null; output_tokens:number|null; partial:boolean }
+
+function UsageLine({ usage }: { usage?: TokenUsage | null }) {
+  if (!usage) return <small className="turn-usage">Token 用量未记录</small>
+  const number = new Intl.NumberFormat(document.documentElement.lang)
+  return <small className="turn-usage" aria-label="本轮 Token 用量">
+    <span>{usage.partial ? '已报告用量' : '本轮用量'} · {number.format(usage.total_tokens)} tokens</span>
+    {usage.input_tokens != null && <span>{'输入'} {number.format(usage.input_tokens)}</span>}
+    {usage.output_tokens != null && <span>{'输出'} {number.format(usage.output_tokens)}</span>}
+  </small>
+}
 type ChatMessage = {
+  token_usage?: TokenUsage | null
   id?: number
   role: string
   content: string
@@ -56,6 +69,7 @@ type ChatMessage = {
 }
 type Conversation = { id: number; title: string; messages?: ChatMessage[] }
 type StreamEvent = {
+  usage?: TokenUsage | null
   type: string
   id?: number
   name?: string
@@ -151,7 +165,9 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
       (m) => m.role === 'user' || m.role === 'assistant',
     ) ??
     []
-  const [command,setCommand]=useState<ChatAction|null>(null),[voice,setVoice]=useState(false)
+  const [search] = useSearchParams()
+  const [command, setCommand] = useState<ChatAction | null>(null)
+  const [voice, setVoice] = useState(() => full && search.get('input') === 'voice')
   function openCommand(action:ChatAction) {
     setCommand(action);setVoice(false);setConfig(false);setShowHistory(false);setError('')
   }
@@ -204,6 +220,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
       )
     }
     function handle(event: StreamEvent) {
+      if (event.type === 'usage') tail(m => ({...m, token_usage:event.usage}))
       if (event.type === 'conversation' && event.id) setCid(event.id)
       if (event.type === 'delta')
         tail((m) => ({ ...m, content: m.content + (event.text ?? '') }))
@@ -343,12 +360,11 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
               <Emblem size="large" />
             </div>
             <h2>从哪里开始？</h2>
-            <p>
-              一起梳理待办、安排时间，
-              <br />
-              或回顾最近的进展。
-            </p>
             <div className="starter-list">
+              <button type="button" className="voice-starter" aria-expanded={voice} onClick={() => {
+                setVoice(!voice)
+                setConfig(false)
+              }}><Mic size={17} /><span>用语音创建任务</span><ArrowRight size={15} /></button>
               {prompts().map(({ icon: Icon, label, text }) => (
                 <button
                   key={label}
@@ -395,6 +411,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
                     )}
                   </div>
                 ))}
+                {m.role === 'assistant' && (m.token_usage || !busy || i < values.length - 1) && <UsageLine usage={m.token_usage} />}
               </article>
             ))}
             {busy && (
@@ -547,6 +564,7 @@ const toolNames: Record<string, string> = {
   list_tasks_by_date: '查询日程',
   create_project: '创建项目',
   list_projects: '查询项目',
+  get_project: '查询项目',
   create_resource: '保存资料',
   search_resources: '查询资料',
   link_resource_to_task: '关联资料',
@@ -573,7 +591,7 @@ function RecordCard({ row }: { row: Record<string, unknown> }) {
       '计划 ' +
         row.scheduled_date +
         (periodLabels[String(row.scheduled_period)] ?? ''),
-    row.due_date && '截止 ' + row.due_date,
+    row.due_date && '截止 ' + row.due_date + (periodLabels[String(row.due_period)] ?? ''),
     minutes && minutes + ' 分钟',
   ]
     .filter(Boolean)

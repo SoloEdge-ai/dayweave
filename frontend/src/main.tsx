@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { I18nextProvider, useTranslation } from 'react-i18next'
-import { i18n, languageChoices, setLanguage } from './i18n'
+import { i18n, setLanguage } from './i18n'
 import {
   QueryClient,
   QueryClientProvider,
@@ -19,9 +19,9 @@ import {
 } from 'react-router-dom'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
-  ArrowRight,
   BookOpen,
   CalendarDays,
+  Columns3,
   CalendarRange,
   Check,
   ChevronRight,
@@ -42,6 +42,7 @@ import {
 } from 'lucide-react'
 import {
   api,
+  dateInZone,
   errorText,
   setActiveAccount,
   useApi,
@@ -53,6 +54,7 @@ import {
   type Account,
   type WorkspaceInfo,
 } from './api'
+import { Login } from './access'
 import { Chat } from './chat'
 import { Editors } from './editors'
 import { HomePage, LibraryPage, ProjectsPage, TasksPage } from './pages'
@@ -69,6 +71,8 @@ import {
   type EditorState,
 } from './ui'
 import './style.css'
+import './workspace.css'
+import { LayoutProvider, PaneGrip, useContainerWidth, usePane } from './pane-layout'
 
 const client = new QueryClient({
   defaultOptions: {
@@ -86,99 +90,10 @@ function useMedia(query: string) {
   }, [query])
   return matches
 }
-function Login({ done, signupEnabled }: { done: (status: Access) => void; signupEnabled: boolean }) {
-  const pendingLanguageKey = 'dayweave.login-language'
-  const [password, setPassword] = useState(''),
-    [username, setUsername] = useState(''),
-    [signup, setSignup] = useState(false),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false)
-  return (
-    <div className="login-shell">
-      <div className="login-top"><Brand />
-        <label className="language-picker"><span>界面语言</span>
-          <select lang={i18n.language} value={i18n.language} onChange={e => {
-            sessionStorage.setItem(pendingLanguageKey, e.target.value)
-            setLanguage(e.target.value)
-          }}>{languageChoices.map(lang => <option key={lang.code} value={lang.code} lang={lang.code}>{lang.name}</option>)}</select>
-        </label>
-      </div>
-      <div className="login-card">
-        <div className="login-motif" aria-hidden="true">
-          {Array.from({ length: 22 }, (_, i) => (
-            <i
-              key={i}
-              style={{
-                width: 140 + i * 14 + 'px',
-                height: 150 + i * 14 + 'px',
-                top: -70 - i * 3 + 'px',
-                right: 5 + i * 3 + 'px',
-              }}
-            />
-          ))}
-        </div>
-        <div className="login-body">
-          <div className="date-line">
-            <span className="date-rule" />
-            个人工作区
-          </div>
-          <h1>{signup ? '创建账号' : '欢迎回到织日'}</h1>
-          <p>{signup ? '每个账号拥有独立的工作区。' : '登录以查看今天的任务、项目与资料。'}</p>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault()
-              setError('')
-              setBusy(true)
-              try {
-                const status = await api<Access>(signup ? '/auth/register' : '/auth/login', 'POST', { username, password })
-                const explicitLanguage = sessionStorage.getItem(pendingLanguageKey)
-                if (explicitLanguage) {
-                  await api('/settings', 'PATCH', { language: explicitLanguage })
-                  sessionStorage.removeItem(pendingLanguageKey)
-                }
-                done(status)
-              } catch (e) {
-                setError(errorText(e))
-              } finally {
-                setBusy(false)
-              }
-            }}
-          >
-            <label className="field">
-              <span>用户名</span>
-              <input value={username} autoComplete="username" autoCapitalize="none" spellCheck={false}
-                required minLength={3} maxLength={48} onChange={e => setUsername(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>密码</span>
-              <input
-                value={password}
-                type="password"
-                autoComplete={signup ? 'new-password' : 'current-password'}
-                minLength={signup ? 10 : undefined}
-                required
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            {error && <ErrorBox message={error} />}
-            <button className="primary" disabled={busy}>
-              {busy ? '正在登录…' : signup ? '注册并登录' : '进入工作区'}
-              <ArrowRight size={16} />
-            </button>
-          </form>
-          {signupEnabled && <button type="button" className="text-button" disabled={busy} onClick={() => {
-            setSignup(!signup)
-            setPassword('')
-            setError('')
-          }}>{signup ? '返回登录' : '创建账号'}</button>}
-        </div>
-      </div>
-    </div>
-  )
-}
 const navEntries = (): [string, string, LucideIcon][] => [
   ['/', '今日总览', LayoutDashboard],
   ['/planner', '日程编排', CalendarRange],
+  ['/board', '任务看板', Columns3],
   ['/tasks/inbox', '收件箱', Inbox],
   ['/tasks/today', '今天', SunMedium],
   ['/tasks/tomorrow', '明天', CalendarDays],
@@ -194,7 +109,7 @@ const extraEntries = (): [string, string, LucideIcon][] => [
   ['/history', '变更记录', History],
   ['/settings', '设置', SlidersHorizontal],
 ]
-function SideNav({ close, logout, account }: { close: () => void; logout: () => void; account: Account }) {
+function SideNav({ close, logout, account }: { close: () => void; logout: () => void; account: Account & { email: string } }) {
   const links = (items: [string, string, LucideIcon][]) =>
     items.map(([url, label, Icon]) => (
       <NavLink
@@ -222,10 +137,10 @@ function SideNav({ close, logout, account }: { close: () => void; logout: () => 
       <div className="nav-bottom">
         {links(extraEntries())}
         <div className="account">
-          <span className="avatar">织</span>
+          <span className="avatar" aria-hidden="true">{account.username.slice(0, 1).toUpperCase()}</span>
           <div>
-            <strong>个人工作区</strong>
-            <small>{account.username}</small>
+            <strong>{account.username}</strong>
+            <small title={account.email}>{account.email}</small>
           </div>
           <IconButton icon={LogOut} label="退出登录" onClick={logout} />
         </div>
@@ -234,7 +149,7 @@ function SideNav({ close, logout, account }: { close: () => void; logout: () => 
   )
 }
 function Shell({ logout, account, workspace, switcher }: {
-  logout: () => void; account: Account; workspace: WorkspaceInfo; switcher: ReactNode
+  logout: () => void; account: Account & { email: string }; workspace: WorkspaceInfo; switcher: ReactNode
 }) {
   const loc = useLocation(),
     nav = useNavigate(),
@@ -243,7 +158,7 @@ function Shell({ logout, account, workspace, switcher }: {
     projects = useApi<Project[]>('/projects'),
     resources = useApi<Resource[]>('/resources')
   const large = useMedia('(min-width: 1260px)'),
-    mobileNav = useMedia('(max-width: 899px)'),
+    mobileNav = useMedia('(max-width: 899px)') || (loc.pathname === '/planner' && !large),
     dark = useMedia('(prefers-color-scheme: dark)')
   const [navOpen, setNavOpen] = useState(false),
     [aiOpen, setAiOpen] = useState(
@@ -253,7 +168,8 @@ function Shell({ logout, account, workspace, switcher }: {
     [toast, setToast] = useState(''),
     timer = useRef<ReturnType<typeof setTimeout> | undefined>()
   const planner = loc.pathname === '/planner'
-  const dockAssistant = large && !planner
+  const board = loc.pathname === '/board' || (loc.pathname.startsWith('/tasks/') && new URLSearchParams(loc.search).get('layout') === 'board')
+  const dockAssistant = large && !planner && !board
   const [plannerAssistant, setPlannerAssistant] = useState(false)
   const full = loc.pathname === '/chat',
     title =
@@ -268,8 +184,8 @@ function Shell({ logout, account, workspace, switcher }: {
     document.title = title + ' · 织日 DayWeave'
     setNavOpen(false)
     setPlannerAssistant(false)
-    if (!large) setAiOpen(false)
-  }, [loc.pathname, large, title])
+    if (!large || board) setAiOpen(false)
+  }, [loc.pathname, board, large, title])
   useEffect(() => {
     if (settings.data?.language && settings.data.language !== i18n.language) {
       setLanguage(settings.data.language)
@@ -310,9 +226,34 @@ function Shell({ logout, account, workspace, switcher }: {
       predicate: (q) => q.queryKey[0] !== '/auth/status',
     })
   }, [client])
+  useEffect(() => {
+    const zone = settings.data?.timezone
+    if (!zone) return
+    let day = dateInZone(zone)
+    function updateDay() {
+      const current = dateInZone(zone)
+      if (current !== day) {
+        day = current
+        void refresh()
+      }
+    }
+    const timer = window.setInterval(updateDay, 15000)
+    document.addEventListener('visibilitychange', updateDay)
+    window.addEventListener('focus', updateDay)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', updateDay)
+      window.removeEventListener('focus', updateDay)
+    }
+  }, [settings.data?.timezone, refresh])
   const activateAssistant = planner ? setPlannerAssistant : setAiOpen
   const close = () => activateAssistant(false),
     showAi = (planner ? plannerAssistant : aiOpen) && !full
+  const viewport = useContainerWidth()
+  const navPane = usePane('navigation', mobileNav ? 265 : large ? 206 : 190,
+    mobileNav ? viewport.width - 32 : viewport.width - (showAi && dockAssistant ? 840 : 540))
+  const assistantPane = usePane('assistant', dockAssistant ? Math.min(360, viewport.width * .24) : Math.min(480, viewport.width * .94),
+    dockAssistant ? viewport.width - navPane.size - 520 : viewport.width - 16)
   return (
     <Workspace.Provider
       value={{
@@ -329,9 +270,12 @@ function Shell({ logout, account, workspace, switcher }: {
       <a className="skip-link" href="#main-content">
         跳到主要内容
       </a>
-      <div className={'shell ' + (showAi && dockAssistant ? 'with-ai' : '')}>
+      <div ref={viewport.ref} style={mobileNav ? undefined : {
+        gridTemplateColumns: navPane.size + 'px minmax(0, 1fr)' + (showAi && dockAssistant ? ' ' + assistantPane.size + 'px' : '')
+      }} className={'shell ' + (showAi && dockAssistant ? 'with-ai' : planner && mobileNav ? 'planning-tablet' : '')}>
         {!mobileNav && (
-          <SideNav close={() => setNavOpen(false)} logout={logout} account={account} />
+          <div className="docked-pane" id={navPane.id}><SideNav close={() => setNavOpen(false)} logout={logout} account={account} />
+            <PaneGrip pane={navPane} /></div>
         )}
         <div className="work-area">
           <header className="topbar">
@@ -388,6 +332,7 @@ function Shell({ logout, account, workspace, switcher }: {
           >
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/board" element={<TasksPage boardDefault />} />
               <Route path="/planner" element={<PlannerPage />} />
               <Route path="/tasks/:view" element={<TasksPage />} />
               <Route path="/library" element={<LibraryPage />} />
@@ -400,16 +345,18 @@ function Shell({ logout, account, workspace, switcher }: {
             </Routes>
           </main>
         </div>
-        {showAi && dockAssistant && <Chat full={false} close={close} />}
+        {showAi && dockAssistant && <div className="docked-pane" id={assistantPane.id}>
+          <Chat full={false} close={close} /><PaneGrip pane={assistantPane} edge="left" /></div>}
       </div>
       {mobileNav && (
         <Dialog.Root open={navOpen} onOpenChange={setNavOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="scrim" />
             <Dialog.Content
-              className="drawer left"
+              className="drawer left" id={navPane.id} style={{ width: navPane.size }}
               aria-describedby={undefined}
             >
+              <PaneGrip pane={navPane} />
               <Dialog.Title className="sr-only">工作区导航</Dialog.Title>
               <Dialog.Close asChild>
                 <button className="drawer-close icon-btn" aria-label="关闭导航">
@@ -426,9 +373,10 @@ function Shell({ logout, account, workspace, switcher }: {
           <Dialog.Portal>
             <Dialog.Overlay className="scrim" />
             <Dialog.Content
-              className="drawer right"
+              className="drawer right" id={assistantPane.id} style={{ width: assistantPane.size }}
               aria-describedby={undefined}
             >
+              <PaneGrip pane={assistantPane} edge="left" />
               <Dialog.Title className="sr-only">织日助手</Dialog.Title>
               <Chat full={false} close={close} />
             </Dialog.Content>
@@ -491,7 +439,7 @@ function App() {
     )
   const { account, signup_enabled } = auth.data
   return (
-    <WorkspaceChooser key={account.id} account={account}>
+    <LayoutProvider key={account.id} account={account.id}><WorkspaceChooser account={account}>
     {(workspace, switcher) => <Shell
       key={workspace.id}
       account={account}
@@ -507,7 +455,7 @@ function App() {
         }
       }}
     />}
-    </WorkspaceChooser>
+    </WorkspaceChooser></LayoutProvider>
   )
 }
 createRoot(document.getElementById('root')!).render(

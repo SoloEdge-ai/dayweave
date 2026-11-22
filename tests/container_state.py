@@ -1,7 +1,6 @@
 """Run inside a disposable Compose installation before and after a restart."""
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
-import os
 import sys
 from threading import Thread
 from uuid import uuid4
@@ -9,7 +8,13 @@ from uuid import uuid4
 import httpx
 
 client = httpx.Client(base_url="http://127.0.0.1:8000", timeout=15, trust_env=False)
-client.post("/api/auth/login", json={"password": os.environ["DAYWEAVE_ADMIN_PASSWORD"]}).raise_for_status()
+password = "only-for-the-disposable-container"
+if sys.argv[1] == "seed":
+    from app.auth import add_account
+    from app.db import SessionLocal
+    with SessionLocal.begin() as session:
+        add_account(session, "admin", "container@example.org", password)
+client.post("/api/auth/login", json={"password": password}).raise_for_status()
 title = "Persistent task"
 sample = b"%PDF-1.4\n% DayWeave storage check\n%%EOF"
 video_url = "https://www.youtube.com/watch?v=DayWeaveTest"

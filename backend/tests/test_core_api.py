@@ -14,7 +14,15 @@ PASSWORD = "disposable-test-password"
 def http(tmp_path, monkeypatch):
     from app import auth, db, main
     monkeypatch.setenv("DAYWEAVE_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("DAYWEAVE_ADMIN_PASSWORD", PASSWORD)
+    from app.email_codes import MailServer
+    monkeypatch.setenv("DAYWEAVE_MAIL_FROM", "sender@example.org")
+    monkeypatch.setenv("DAYWEAVE_SMTP_HOST", "localhost")
+    monkeypatch.setenv("DAYWEAVE_SMTP_SECURITY", "starttls")
+    monkeypatch.setattr(auth, "_attempts", {})
+    def capture(server, recipient, purpose, code, language):
+        if code is not None:
+            (tmp_path / (recipient + "." + purpose)).write_text(code)
+    monkeypatch.setattr(MailServer, "send", capture)
     engine = create_engine(db.sqlite_url(), connect_args={"check_same_thread": False})
     event.listen(engine, "connect", db.configure_sqlite)
     sessions = sessionmaker(engine, expire_on_commit=False)
@@ -25,9 +33,19 @@ def http(tmp_path, monkeypatch):
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     command.upgrade(config, "head")
     command.upgrade(config, "head")
+    with sessions.begin() as db_session:
+        auth.add_account(db_session, "admin", "admin@example.org", PASSWORD)
     with TestClient(main.app) as client:
         yield client, tmp_path
     engine.dispose()
+
+
+def register(client, root, username, password):
+    email = username.lower() + "@example.org"
+    response = client.post("/api/auth/email-code", json={"email": email, "purpose": "register"})
+    assert response.status_code == 202
+    code = (root / (email + ".register")).read_text()
+    return client.post("/api/auth/register", json={"email": email, "code": code, "username": username, "password": password})
 
 
 def login(client, root):
@@ -36,6 +54,58 @@ def login(client, root):
     assert result.status_code == 200
     assert "HttpOnly" in result.headers["set-cookie"]
     return secret
+
+
+def test_workspace_tag_selection_and_reuse(http):
+    client, root = http
+    login(client, root)
+    original = client.post("/api/tags", json={"name": " Design "}).json()
+    assert client.post("/api/tags", json={"name": "design"}).json() == original
+    assert client.post("/api/tags", json={"name": " "}).status_code == 422
+    task = client.post("/api/tasks", json={"title": "Review", "tags": ["Design", "iPad", "IPAD"]}).json()
+    assert task["tags"] == ["Design", "iPad"] and task["category"] == "Design"
+    assert [row["id"] for row in client.get("/api/tasks?category=ipad").json()] == [task["id"]]
+    url = f"/api/tasks/{task['id']}"
+    client.patch(url, json={"tags": []}).raise_for_status()
+    assert client.get(url).json()["tags"] == []
+    assert len(client.get("/api/tags").json()) == 2
+    change = client.get("/api/changes").json()[0]
+    assert client.post(f"/api/changes/{change['id']}/undo").json()["record"]["tags"] == task["tags"]
+    assert client.patch(url, json={"category": "Legacy"}).json()["tags"] == ["Legacy", "iPad"]
+    other = client.post("/api/workspaces", json={"name": "Other"}).json()
+    assert client.get("/api/tags", headers={"X-DayWeave-Workspace": other["id"]}).json() == []
+
+
+def test_unfinished_day_returns_to_backlog_with_calendar_history(http, monkeypatch):
+    from datetime import date
+    from app import services
+
+    client, root = http
+    login(client, root)
+    day = date(2028, 3, 11)
+    monkeypatch.setattr(services, "local_today", lambda zone: day)
+    task = client.post("/api/tasks", json={
+        "title": "Write onboarding", "scheduled_date": str(day), "scheduled_period": "afternoon",
+        "due_date": "2028-03-17", "due_period": "evening", "status": "in_progress",
+    }).json()
+    task_id = task["id"]
+    url = f"/api/tasks/{task_id}"
+    history = "/api/planner/history?start=2028-03-11&end=2028-03-17"
+    day = date(2028, 3, 12)
+    assert client.get("/api/tasks?view=today").json() == []
+    returned = client.get("/api/tasks?view=inbox").json()
+    assert [row["id"] for row in returned] == [task_id]
+    assert returned[0]["scheduled_date"] is None and returned[0]["scheduled_period"] is None
+    assert (returned[0]["status"], returned[0]["due_date"], returned[0]["due_period"]) == ("in_progress", "2028-03-17", "evening")
+    [record] = client.get(history).json()
+    assert record["id"] == task_id and record["is_past_plan"] and record["scheduled_period"] == "afternoon"
+    assert client.patch(url, json={"scheduled_date":str(day)}).json()["id"] == task_id
+    assert [row["id"] for row in client.get("/api/tasks?view=today").json()] == [task_id]
+    assert client.patch(url, json={"status":"done"}).json()["status"] == "done"
+    day = date(2028, 3, 14)
+    assert client.get("/api/tasks?view=inbox").json() == []
+    assert client.get(history).json() == [record]
+    assert client.get(url).json()["completed_at"]
 
 
 def test_schedule_optimistic_move_conflict_and_undo(http):
@@ -104,7 +174,7 @@ def test_http_access_export_and_rollback(http):
 def test_accounts_isolate_records_files_settings_and_session_identity(http):
     from app.main import app
     first, root = http
-    identity = first.post("/api/auth/register", json={"username": "Alice", "password": "password-for-alice"}).json()["account"]
+    identity = register(first, root, "Alice", "password-for-alice").json()["account"]
     assert identity["username"] == "alice"
     assert first.post("/api/tasks", json={"title": "Alice only"}).status_code == 201
     assert first.post("/api/projects", json={"name": "Alice project"}).status_code == 201
@@ -114,7 +184,7 @@ def test_accounts_isolate_records_files_settings_and_session_identity(http):
 
     with TestClient(app) as second:
         assert second.get("/api/tasks").status_code == 401
-        response = second.post("/api/auth/register", json={"username": "bob", "password": "password-for-bob"})
+        response = register(second, root, "bob", "password-for-bob")
         assert response.status_code == 201, response.text
         assert response.json()["account"]["id"] != identity["id"]
         for path in ("/api/tasks", "/api/projects", "/api/resources", "/api/changes", "/api/ai/conversations"):
@@ -148,8 +218,8 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
         return httpx.Response(200, text="data: " + json.dumps({"choices": [choice]}) + "\n\ndata: [DONE]\n\n")
 
     monkeypatch.setattr(Adapter, "client", lambda self: httpx.Client(transport=httpx.MockTransport(simulate)))
-    alice, _ = http
-    assert alice.post("/api/auth/register", json={"username": "alice", "password": "alice-password-22"}).status_code == 201
+    alice, root = http
+    assert register(alice, root, "alice", "alice-password-22").status_code == 201
     personal = alice.get("/api/workspaces").json()[0]
     shared = alice.post("/api/workspaces", json={"name": "Shared work"}).json()
     assert len(alice.get("/api/workspaces").json()) == 2
@@ -160,7 +230,7 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
         "api_key": "alice-profile-token", "base_url": "https://fixture.example/v1", "model": "shared-fixture",
     }).status_code == 200
     with TestClient(app) as bob:
-        actor = bob.post("/api/auth/register", json={"username": "bob", "password": "bob-password-111"}).json()["account"]
+        actor = register(bob, root, "bob", "bob-password-111").json()["account"]
         assert bob.get("/api/tasks", headers=view).status_code == 401
         assert alice.post(f"/api/workspaces/{shared['id']}/members", json={"username": "bob"}).status_code == 201
         assert bob.get("/api/tasks", headers=view).json()[0]["title"] == "Shared task"
@@ -251,3 +321,154 @@ def test_language_negotiation_persistence_and_localized_errors(http):
     assert conflict.json()["code"] == "time.due_conflict" and "期限" in conflict.json()["detail"]
     item = client.get(f"/api/tasks/{tid}").json()
     assert item["title"] == original_title and item["status"] == "todo"
+
+def test_email_ownership_and_password_recovery(http, monkeypatch):
+    from app import email_codes
+    from app.main import app
+    client, root = http
+    email = "owner@example.org"
+    credentials = {"email": email.upper(), "username": "owner", "password": PASSWORD}
+    assert client.post("/api/auth/register", json=credentials).status_code == 422
+    request = {"email": email, "purpose": "register"}
+    with monkeypatch.context() as outage:
+        def unavailable(*args):
+            raise ConnectionResetError()
+        outage.setattr(email_codes.MailServer, "send", unavailable)
+        for address in (email, "admin@example.org"):
+            failed = client.post("/api/auth/email-code", json={**request, "email": address})
+            assert failed.status_code == 503 and failed.json()["code"] == "auth.mail_delivery_failed"
+    assert client.post("/api/auth/email-code", json=request).json() == {"accepted": True}
+    register_code = (root / (email + ".register")).read_text()
+    assert client.post("/api/auth/email-code", json=request).status_code == 202
+    assert (root / (email + ".register")).read_text() == register_code
+    wrong = ("0" if register_code[0] != "0" else "1") + register_code[1:]
+    assert client.post("/api/auth/register", json={**credentials, "code": wrong}).status_code == 400
+    assert client.post("/api/auth/register", json={**credentials, "code": register_code}).json()["account"]["email"] == email
+    assert client.post("/api/auth/register", json={**credentials, "code": register_code}).status_code == 400
+    task = client.post("/api/tasks", json={"title": "Retained after recovery"}).json()
+    with TestClient(app) as visitor:
+        unknown = visitor.post("/api/auth/email-code", json={"email": "unknown@example.org", "purpose": "reset"})
+        known = visitor.post("/api/auth/email-code", json={"email": email, "purpose": "reset"})
+        assert unknown.status_code == known.status_code == 202 and unknown.json() == known.json()
+        assert not (root / "unknown@example.org.reset").exists()
+        reset_code = (root / (email + ".reset")).read_text()
+        reset = {"email": email.upper(), "password": "replacement-test-secret", "code": reset_code}
+        assert visitor.post("/api/auth/reset-password", json=reset).status_code == 204
+        assert visitor.post("/api/auth/reset-password", json=reset).status_code == 400
+        assert client.get("/api/tasks").status_code == 401
+        assert visitor.get("/api/tasks").status_code == 401
+        assert visitor.post("/api/auth/login", json={"username": email, "password": PASSWORD}).status_code == 401
+        assert visitor.post("/api/auth/login", json={"username": email, "password": reset["password"]}).status_code == 200
+        assert visitor.get("/api/tasks").json()[0]["id"] == task["id"]
+        visitor.post("/api/auth/email-code", json={"email": email, "purpose": "reset"})
+        reset["code"] = (root / (email + ".reset")).read_text()
+        monkeypatch.setattr(email_codes, "TTL", 0)
+        assert visitor.post("/api/auth/reset-password", json=reset).status_code == 400
+
+
+def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http, monkeypatch):
+    """Exercise the browser's login, polling, chat, draft edit and disconnect requests."""
+    import json
+    from contextlib import contextmanager
+    from queue import Queue
+    from time import monotonic, sleep
+    from app.ai import codex_provider
+    from app.main import app
+
+    client, root = http
+    login(client, root)
+    workspace = client.get("/api/workspaces").json()[0]
+    scope = {"X-DayWeave-Workspace": workspace["id"]}
+    messages = Queue()
+    auth = '{"auth_mode":"chatgpt","tokens":{"access_token":"private-grant","refresh_token":"fixture-only"}}'
+    catalog_ready = False
+
+    class FixtureRPC:
+        cwd = root
+        auth_file = root / "fixture-grant.json"
+        notifications = []
+
+        def call(self, method, params):
+            if method == "account/login/start":
+                assert params == {"type": "chatgptDeviceCode"}
+                self.auth_file.write_text(auth)
+                return {"loginId": "test", "verificationUrl": "https://auth.openai.com/codex/device", "userCode": "TEST-CODE"}
+            if method == "thread/start":
+                assert params["ephemeral"] and params["environments"] == [] and params["sandbox"] == "read-only"
+                return {"thread": {"id": "t"}}
+            assert method == "turn/start"
+            assert params["outputSchema"]["type"] == "object"
+            return {"turn": {"id": "turn"}}
+
+        def models(self):
+            if not catalog_ready:
+                raise codex_provider.ProviderError("Model catalog unavailable")
+            return [{"id": "fixture-model", "name": "Fixture", "default": True, "efforts": ["low"]}]
+
+        def events(self, deadline):
+            text = json.dumps({"calls": [{"name": "create_task", "arguments": json.dumps({"title": "Draft from Codex", "tags": ["Design"]})}]})
+            for value in (6, 10):
+                yield {"method": "thread/tokenUsage/updated", "params": {"turnId": "turn", "threadId": "t",
+                       "tokenUsage": {"total": {"inputTokens": value, "outputTokens": 2, "totalTokens": value + 2}}}}
+            yield {"method": "item/completed", "params": {"turnId": "turn", "item": {"type": "agentMessage", "text": text}}}
+            yield {"method": "turn/completed", "params": {"turn": {"id": "turn", "status": "completed"}}}
+
+    @contextmanager
+    def transport(grant=None):
+        rpc = FixtureRPC()
+        rpc.messages = messages
+        if grant is not None:
+            assert grant == auth
+        yield rpc
+
+    monkeypatch.setattr(codex_provider, "runtime", transport)
+    with TestClient(app) as peer:
+        assert register(peer, root, "peer", "peer-password-123").status_code == 201
+        assert client.post(f"/api/workspaces/{workspace['id']}/members", json={"username": "peer"}).status_code == 201
+        flow = client.post("/api/ai/codex/login", headers=scope)
+        assert flow.json()["user_code"] == "TEST-CODE" and flow.headers["Cache-Control"] == "no-store"
+        assert peer.get("/api/ai/codex/login", headers=scope).json() == {"state": "idle"}
+        def final_state():
+            deadline = monotonic() + 5
+            while monotonic() < deadline:
+                result = client.get("/api/ai/codex/login", headers=scope).json()
+                if result["state"] in {"failed", "connected"}:
+                    return result
+                sleep(0.025)
+            raise AssertionError("The device flow never finished")
+
+        messages.put({"method": "account/login/completed", "params": {
+            "loginId": "test", "success": False, "error": "403 Forbidden private diagnostic"}})
+        assert final_state() == {"state": "failed", "reason": "exchange_forbidden"}
+        assert not next(p for p in client.get("/api/ai/providers").json() if p["id"] == "codex")["has_key"]
+        assert client.post("/api/ai/codex/login", headers=scope).json()["state"] == "pending"
+        messages.put({"method": "account/login/completed", "params": {"loginId": "another-flow", "success": False}})
+        messages.put({"method": "account/login/completed", "params": {"loginId": None, "success": True}})
+        assert final_state() == {"state": "connected"}, "An approved login was discarded"
+        providers = client.get("/api/ai/providers", headers=scope)
+        assert "private-grant" not in providers.text and "TEST-CODE" not in providers.text
+        saved = next(p for p in providers.json() if p["id"] == "codex")
+        assert saved["has_key"] and not saved["models"]
+        assert client.post("/api/ai/codex/login", headers=scope).json()["state"] == "connected"
+        catalog_ready = True
+        refreshed = client.post("/api/ai/providers/codex/test", headers=scope).json()
+        assert refreshed["models"] == ["fixture-model"] and refreshed["model"] == "fixture-model"
+        assert not next(p for p in peer.get("/api/ai/providers", headers=scope).json() if p["id"] == "codex")["has_key"]
+        response = client.post("/api/ai/chat", headers=scope, json={"provider": "codex", "request_id": "codex-test-request", "content": "Create a task tagged Design"})
+        frames = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: {")]
+        usage = [frame["usage"] for frame in frames if frame["type"] == "usage"][-1]
+        assert usage == {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12, "partial": False}
+        draft = next(frame for frame in frames if frame["type"] == "task_draft")
+        assert draft["drafts"][0]["task"]["tags"] == ["Design"]
+        assert client.get("/api/tags", headers=scope).json() == []
+        url = f"/api/ai/confirmations/{draft['id']}"
+        assert peer.get(url, headers=scope).status_code == 404
+        assert client.get("/api/tasks", headers=scope).json() == []
+        edited = client.patch(url + "/draft", headers=scope, json={"version": draft["version"], "drafts": [{"index": 0, "task": {"title": "Edited Codex task", "tags": ["Review"]}}]})
+        assert edited.status_code == 200 and client.get("/api/tasks", headers=scope).json() == []
+        assert client.post(url, headers=scope, json={"approve": True, "version": edited.json()["version"]}).status_code == 200
+        [shared_task] = peer.get("/api/tasks", headers=scope).json()
+        assert (shared_task["title"], shared_task["tags"]) == ("Edited Codex task", ["Review"])
+        assert [tag["name"] for tag in peer.get("/api/tags",headers=scope).json()] == ["Review"]
+        assert client.post("/api/ai/codex/disconnect").status_code == 204
+        assert client.get("/api/ai/codex/login", headers=scope).json() == {"state": "idle"}

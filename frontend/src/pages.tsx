@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react'
+import { TaskBoard } from './task-board'
+import { WeekStrip, monday } from './week-strip'
 import { i18n } from './i18n'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -7,9 +9,10 @@ import {
   Bell,
   BookOpen,
   CalendarClock,
+  Columns3,
+  List,
   CalendarDays,
   Check,
-  CheckCheck,
   ChevronDown,
   Clock3,
   ExternalLink,
@@ -23,8 +26,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
-  Sun,
-  Timer,
+  Mic,
 } from 'lucide-react'
 import {
   api,
@@ -44,6 +46,8 @@ import {
   useApi,
   viewLabels,
   type Dashboard,
+  type Tag,
+  taskTags,
   type Project,
   type Resource,
   type Task,
@@ -93,7 +97,7 @@ function Section({
   to,
   children,
 }: {
-  icon: typeof Sun
+  icon: typeof CalendarDays
   title: string
   count?: number
   link?: string
@@ -199,12 +203,9 @@ export function TaskRow({
               {project.name}
             </span>
           )}
-          {t.category && (
-            <span>
-              <i className="category-dot" />
-              {t.category}
-            </span>
-          )}
+          {taskTags(t).map(tag => (
+            <span key={tag}><i className="category-dot" />{tag}</span>
+          ))}
           {time && (
             <span>
               <Clock3 size={12} />
@@ -221,7 +222,7 @@ export function TaskRow({
           {due && (
             <span>
               <Flag size={12} />
-              {dateLabel(due)}{t.due_at ? ' '+timeLabel(t.due_at,zone) : ''}截止
+              {dateLabel(due)}{t.due_at ? ' '+timeLabel(t.due_at,zone) : t.due_period ? ' '+periodLabels[t.due_period] : ''}截止
             </span>
           )}
           {t.resource_ids?.length > 0 && (
@@ -245,23 +246,6 @@ export function TaskRow({
     </div>
   )
 }
-function Threads() {
-  return (
-    <div className="threads" aria-hidden="true">
-      {Array.from({ length: 23 }, (_, i) => (
-        <i
-          key={i}
-          style={{
-            width: 118 + i * 9 + 'px',
-            height: 150 + i * 9 + 'px',
-            right: -18 + i * 1.4 + 'px',
-            top: -43 - i * 2.4 + 'px',
-          }}
-        />
-      ))}
-    </div>
-  )
-}
 function dayOrder(tasks: Task[], zone: string) {
   const periodTimes: Record<string, string> = {
     morning: '09:00',
@@ -282,6 +266,7 @@ export function HomePage() {
   const data = useApi<Dashboard>('/dashboard/today'),
     { edit, settings } = useWorkspace(),
     nav = useNavigate()
+  const week = useApi<Task[]>('/tasks?view=week')
   const overview = data.data,
     zone = settings?.timezone ?? 'Asia/Hong_Kong',
     date = overview?.date ?? dateInZone(zone),
@@ -307,12 +292,13 @@ export function HomePage() {
       </div>
       <Heading
         title="今日总览"
+        sub={overview ? '已完成' + ' ' + tasks.filter(t => t.status === 'done').length + ' / ' + tasks.length +
+          '　' + '预计投入' + ' ' + tasks.reduce((sum, task) => sum + (task.estimated_minutes || 0), 0) + ' ' + '分钟' : undefined}
         action={
-          <div className="overview-sun" aria-hidden="true">
-            <Sun size={29} strokeWidth={1.3} />
-          </div>
+          <Link to="/chat?input=voice" className="primary dashboard-chat"><Mic size={17} />用语音创建任务</Link>
         }
       />
+      <WeekStrip selected={date} today={date} tasks={week.data} />
       <QuickCapture />
       {data.isPending ? (
         <Loading />
@@ -323,66 +309,6 @@ export function HomePage() {
         />
       ) : (
         <>
-          <div className="focus-panel">
-            <Threads />
-            <div className="focus-inner">
-              <div className="focus-label">
-                <Flag size={15} />
-                今日重点
-                <span>{String(focus.length).padStart(2, '0')} / 03</span>
-              </div>
-              {focus.length ? (
-                focus.slice(0, 3).map((t, i) => (
-                  <button
-                    key={t.id}
-                    className={'focus-task ' + (i === 0 ? 'first' : '')}
-                    onClick={() => edit({ kind: 'task', task: t })}
-                  >
-                    {t.title}
-                    <ArrowUpRight size={15} />
-                  </button>
-                ))
-              ) : (
-                <>
-                  <h2>今天，先专注一件事。</h2>
-                  <button
-                    className="focus-link"
-                    onClick={() =>
-                      edit({
-                        kind: 'task',
-                        initial: { pinned: true, scheduled_date: date },
-                      })
-                    }
-                  >
-                    <Plus size={14} />
-                    设置今日重点
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="metrics">
-            <div>
-              <ListChecks />
-              <span>今日任务</span>
-              <strong>{tasks.length}</strong>
-              <small>项</small>
-            </div>
-            <div>
-              <CheckCheck />
-              <span>已完成</span>
-              <strong>{tasks.filter((t) => t.status === 'done').length}</strong>
-              <small>项</small>
-            </div>
-            <div>
-              <Timer />
-              <span>预计投入</span>
-              <strong>
-                {tasks.reduce((n, t) => n + (t.estimated_minutes || 0), 0)}
-              </strong>
-              <small>分钟</small>
-            </div>
-          </div>
           <Section
             icon={ListChecks}
             title="今日任务"
@@ -409,6 +335,12 @@ export function HomePage() {
               </Empty>
             )}
           </Section>
+          {focus.length > 0 && <section className="daily-focus">
+            <h2><Flag size={16} />今日重点</h2>
+            <div>{focus.slice(0, 3).map(task =>
+              <button key={task.id} onClick={() => edit({ kind: 'task', task })}>{task.title}<ArrowUpRight size={14} /></button>
+            )}</div>
+          </section>}
           <Section
             icon={BookOpen}
             title="今日阅读与观看"
@@ -457,12 +389,18 @@ export function HomePage() {
     </>
   )
 }
-export function TasksPage() {
+export function TasksPage({ boardDefault = false }: { boardDefault?: boolean }) {
   const { view = 'all' } = useParams(),
     { edit, projects, settings } = useWorkspace(),
     [params, setParams] = useSearchParams(),
     [filters, setFilters] = useState(false)
+  const tagCatalog = useApi<Tag[]>('/tags', filters)
   const apiParams = new URLSearchParams(params)
+  const board = params.has('layout') ? params.get('layout') === 'board' : boardDefault
+  apiParams.delete('layout')
+  const hasFilters = apiParams.size > 0
+  const scopeParams = new URLSearchParams(apiParams)
+  if (board) scopeParams.set('layout', 'board')
   apiParams.set('view', view in viewLabels ? view : 'all')
   const query = useApi<Task[]>('/tasks?' + apiParams),
     items = ['today', 'tomorrow'].includes(view)
@@ -481,7 +419,7 @@ export function TasksPage() {
   return (
     <>
       <Heading
-        title={viewLabels[view] ?? '全部任务'}
+        title={boardDefault && board ? '任务看板' : viewLabels[view] ?? '全部任务'}
         sub={
           date
             ? dateLabel(date, {
@@ -506,7 +444,7 @@ export function TasksPage() {
           <Link
             key={v}
             className={v === view ? 'active' : ''}
-            to={'/tasks/' + v}
+            to={{ pathname: '/tasks/' + v, search: scopeParams.toString() }}
           >
             {label}
           </Link>
@@ -531,6 +469,10 @@ export function TasksPage() {
           <SlidersHorizontal size={15} />
           筛选
         </button>
+        <div className="layout-toggle" role="group" aria-label="任务布局">
+          <button type="button" aria-pressed={!board} onClick={() => set('layout', 'list')}><List size={16} />列表</button>
+          <button type="button" aria-pressed={board} onClick={() => set('layout', 'board')}><Columns3 size={16} />看板</button>
+        </div>
       </div>
       {filters && (
         <div className="filters">
@@ -538,6 +480,7 @@ export function TasksPage() {
             [
               ['priority', '优先级', priorityLabels],
               ['status', '状态', statusLabels],
+              ['category', '标签', Object.fromEntries((tagCatalog.data ?? []).map(tag => [tag.name, tag.name]))],
               [
                 'project_id',
                 '项目',
@@ -562,7 +505,6 @@ export function TasksPage() {
           ))}
           {(
             [
-              ['category', '分类', 'text'],
               ['scheduled_date', '计划日期', 'date'],
               ['due_date', '截止日期', 'date'],
             ] as const
@@ -576,7 +518,7 @@ export function TasksPage() {
               />
             </label>
           ))}
-          <button className="text-button" onClick={() => setParams({})}>
+          <button className="text-button" onClick={() => setParams(board ? {layout:'board'} : {layout:'list'})}>
             清除筛选
           </button>
         </div>
@@ -588,7 +530,13 @@ export function TasksPage() {
           message={errorText(query.error)}
           retry={() => void query.refetch()}
         />
-      ) : items.length ? (
+      ) : board ? <TaskBoard key={apiParams.toString()} items={items} view={view} status={params.get('status')} defaults={{
+        scheduled_date: params.get('scheduled_date') || date || (view === 'upcoming' ? dateInZone(settings?.timezone, 1) : null),
+        ...(view === 'week' && !params.get('scheduled_date') ? {planning_window: 'week', window_start: monday(dateInZone(settings?.timezone))} : {}),
+        due_date: params.get('due_date'),
+        project_id: Number(params.get('project_id')) || null, category: params.get('category') ?? '',
+        ...(params.get('priority') ? { priority: params.get('priority')! } : {}),
+      }} /> : items.length ? (
         <div className="rows">
           {items.map((t) => (
             <TaskRow key={t.id} t={t} showDate />
@@ -597,7 +545,7 @@ export function TasksPage() {
       ) : (
         <Empty
           icon={Inbox}
-          title={params.size ? '没有匹配的任务' : '这里还没有任务'}
+          title={hasFilters ? '没有匹配的任务' : '这里还没有任务'}
           action="新建任务"
           onAction={() =>
             edit({ kind: 'task', initial: { scheduled_date: date } })

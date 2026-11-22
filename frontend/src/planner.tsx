@@ -1,22 +1,20 @@
 import { useState, type FormEvent } from 'react'
-import { CalendarDays, Inbox, Pencil, Undo2 } from 'lucide-react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Inbox, Pencil, Undo2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { api, dateInZone, dateLabel, errorText, periodLabels, timeLabel, useApi, type Dashboard, type Task } from './api'
+import { api, dateInZone, dateLabel, errorText, periodLabels, timeLabel, taskTags, useApi, type Dashboard, type Task } from './api'
 import { localInput, toIso } from './datetime'
+import { WeekStrip, shift, monday, weekday } from './week-strip'
 import { Heading } from './pages'
 import { ErrorBox, Field, IconButton, Loading, Modal, useWorkspace } from './ui'
+import { PaneGrip, useContainerWidth, usePane } from './pane-layout'
 import './planner.css'
 
 const scopes = {
   today: '今天', tomorrow: '明天', week: '本周', next_week: '下周', month: '本月',
 }
 type Scope = keyof typeof scopes
-const open = (task: Task) => task.status === 'todo' || task.status === 'in_progress'
+const open = (task: Task) => !task.is_past_plan && (task.status === 'todo' || task.status === 'in_progress')
 const periodOrder: Record<string, string> = { morning: '06:00', afternoon: '12:00', evening: '18:00' }
-const weekday = (date: string) => new Date(date + 'T12:00:00Z').getUTCDay()
-const shift = (date: string, days: number) =>
-  new Date(Date.parse(date + 'T12:00:00Z') + days * 86400000).toISOString().slice(0, 10)
-const monday = (date: string) => shift(date, -((weekday(date) + 6) % 7))
 const dayLabel = (date: string) => dateLabel(date, { weekday: 'long', month: 'short', day: 'numeric' })
 const dateParam = (value: string | null) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
   new Date(value + 'T12:00:00Z').toJSON()?.slice(0, 10) === value ? value : null
@@ -61,6 +59,14 @@ function PlannerEditor({ task, target, close, saved }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const endTime = end.slice(11)
+
+  function changeDay(next: string) {
+    if (next && date && endDay) {
+      const span = Math.round((Date.parse(endDay + 'T12:00Z') - Date.parse(date + 'T12:00Z')) / 86400000)
+      setEndDay(shift(next, span))
+    } else if (next) setEndDay(next)
+    setDate(next)
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -108,14 +114,11 @@ function PlannerEditor({ task, target, close, saved }: {
               dateLabel(preserveWindow.anchor) + ' – ' + dateLabel(shift(preserveWindow.anchor, 6))}
           </p>}
           {kind === 'day' && <>
-            <Field label="计划日期"><input type="date" required value={date} onChange={e => {
-              const next = e.target.value
-              if (next && date && endDay) {
-                const span = Math.round((Date.parse(endDay + 'T12:00Z') - Date.parse(date + 'T12:00Z')) / 86400000)
-                setEndDay(shift(next, span))
-              } else if (next) setEndDay(next)
-              setDate(next)
-            }} /></Field>
+            <div className="wide date-shortcuts" role="group" aria-label="选择计划日期">
+              <button type="button" aria-pressed={date === dateInZone(zone)} onClick={() => changeDay(dateInZone(zone))}>今天</button>
+              <button type="button" aria-pressed={date === dateInZone(zone, 1)} onClick={() => changeDay(dateInZone(zone, 1))}>明天</button>
+            </div>
+            <Field label="计划日期"><input type="date" required value={date} onChange={e => changeDay(e.target.value)} /></Field>
             <Field label="计划时段"><select value={period} onChange={e => setPeriod(e.target.value)}>
               <option value="">时间待定</option>
               {Object.entries(periodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -144,9 +147,12 @@ function PlannerEditor({ task, target, close, saved }: {
 }
 
 export function PlannerPage() {
-  const { settings, refresh, notify } = useWorkspace()
+  const { settings, refresh, notify, edit } = useWorkspace()
   const zone = settings?.timezone ?? 'Asia/Hong_Kong'
   const [search, setSearch] = useSearchParams()
+  const container = useContainerWidth()
+  const backlogPane = usePane('backlog', Math.min(250, container.width * .24), container.width - 495)
+  const stacked = container.width < 800
   const view = search.get('view')
   const scope = view && Object.hasOwn(scopes, view) ? view as Scope : 'today'
   const focus = dateParam(search.get('date'))
@@ -183,7 +189,10 @@ export function PlannerPage() {
   const day = calendar ? (focus && calendarDays.includes(focus) ? focus : null) :
     custom ? focus : scope === 'tomorrow' ? shift(today, 1) : today
   const last = shift(first, byMonth ? monthDays - 1 : 6)
-  const visible = (plan.data ?? []).filter(task => {
+  const historyStart = calendar ? first : day ?? today
+  const historyEnd = calendar ? last : historyStart
+  const past = useApi<Task[]>('/planner/history?start=' + historyStart + '&end=' + historyEnd, historyStart <= today)
+  const visible = [...(plan.data ?? []), ...(past.data ?? [])].filter(task => {
     if (task.status === 'cancelled') return false
     if (!anchored) return true
     if (task.scheduled_date) return task.scheduled_date >= first && task.scheduled_date <= last
@@ -192,13 +201,35 @@ export function PlannerPage() {
     return task.window_start <= last && shift(task.window_start, 6) >= first
   })
   const order = (task: Task) => localInput(task.planned_start_at, zone).slice(11, 16) ||
-    periodOrder[task.scheduled_period ?? ''] || ''
-  const agenda = visible.filter(task => task.scheduled_date === day)
-    .sort((a, b) => order(a).localeCompare(order(b)))
+    periodOrder[task.scheduled_period ?? ''] || '24:00'
+  function agendaOrder(a: Task, b: Task) {
+    return Number(!open(a)) - Number(!open(b)) || order(a).localeCompare(order(b)) || a.id - b.id
+  }
+  const agenda = visible.filter(task => task.scheduled_date === day).sort(agendaOrder)
   const floating = visible.filter(task => task.planning_window)
   const queue = missed ? todayData.data?.missed ?? [] : backlog.data ?? []
   const target: Target = day ? {date: day} : {window: byMonth ? 'month' : 'week', anchor: first}
   const highlighted = Number(search.get('task'))
+
+  function movePeriod(direction: number) {
+    const next = byMonth ? new Date(Date.UTC(+first.slice(0, 4), +first.slice(5, 7) - 1 + direction, 1)).toISOString().slice(0, 10) :
+      shift(first, direction * 7)
+    const params = new URLSearchParams(search)
+    params.set('view', byMonth ? 'month' : 'week')
+    if (byMonth ? next === today.slice(0, 7) + '-01' : next === monday(today)) {
+      params.delete('anchor')
+    } else if (!byMonth && next === shift(monday(today), 7)) {
+      params.set('view', 'next_week')
+      params.delete('anchor')
+    } else params.set('anchor', next)
+    params.delete('task')
+    if (day) {
+      const lastDay = byMonth ? new Date(Date.UTC(+next.slice(0, 4), +next.slice(5, 7), 0)).getUTCDate() : 7
+      const index = byMonth ? Math.min(lastDay, +day.slice(-2)) - 1 : (weekday(day) + 6) % 7
+      params.set('date', shift(next, index))
+    }
+    setSearch(params)
+  }
 
   function selectDay(date: string) {
     const params = new URLSearchParams(search)
@@ -206,12 +237,26 @@ export function PlannerPage() {
     setSearch(params, { replace: true })
     if (armed) setEditor({ task: armed, target: { date } })
   }
-  const row = (task: Task) => <li key={task.id} className={'planner-agenda-row ' + (highlighted === task.id ? 'highlighted' : '')}>
-    <span>{clock(task, zone)}</span><strong>{task.title}</strong>
-    {open(task) && <IconButton icon={Pencil} label={'编辑安排' + ' · ' + task.title} onClick={() => setEditor({task})} />}
-  </li>
+  function row(task: Task) {
+    const tags = taskTags(task)
+    const details = <><strong>{task.title}</strong>
+      {(tags.length > 0 || !!task.estimated_minutes) && <small>{[...tags,
+        task.estimated_minutes ? task.estimated_minutes + ' ' + '分钟' : null].filter(Boolean).join(' · ')}</small>}
+    </>
+    return <li key={task.id} className={['planner-agenda-row', task.is_past_plan ? 'past-plan' : task.status, highlighted === task.id ? 'highlighted' : ''].join(' ')}>
+      <span>{clock(task, zone)}</span>
+      {open(task) ? <button className="agenda-task" onClick={() => setEditor({task})} aria-label={'编辑安排' + ' · ' + task.title}>
+        <span>{details}</span><Pencil size={16} aria-hidden="true" />
+      </button> : <div className="agenda-task"><span>{details}</span>{task.is_past_plan && <small>安排过</small>}</div>}
+      {open(task) && <IconButton icon={Check} label={'完成任务' + ' · ' + task.title} disabled={busy} onClick={async () => {
+        setBusy(true)
+        try { await api('/tasks/' + task.id, 'PATCH', {status:'done'}); await refresh(); notify('任务已完成') }
+        catch (e) { setError(errorText(e)) } finally { setBusy(false) }
+      }} /> }
+    </li>
+  }
 
-  return <div className="planner-workspace">
+  return <div ref={container.ref} className={'planner-workspace' + (stacked ? ' stacked' : '')}>
     <Heading title="日程编排" />
     <div className="planner-toolbar">
       <nav aria-label="计划范围">
@@ -237,9 +282,10 @@ export function PlannerPage() {
         setBusy(false)
       }
     }}><Undo2 size={16} />撤销安排</button>}
-    <div className="planner-columns">
+    <div className="planner-columns" style={{ gridTemplateColumns: stacked ? 'minmax(0,1fr)' : backlogPane.size + 'px minmax(0,1fr)' }}>
+      <div className={'backlog-pane' + (stacked && !mobileBacklog ? ' hidden' : '')} id={backlogPane.id}>
       <aside className={'planner-backlog ' + (mobileBacklog ? 'expanded' : '')} aria-label="待安排">
-        <header><Inbox size={18} /><h2>待安排</h2></header>
+        <header><Inbox size={18} /><h2>待安排</h2><span className="planner-total">{queue.length}</span></header>
         <div className="planner-queue">
           <nav aria-label="待办来源">
             <button className="secondary" aria-pressed={!missed} onClick={() => setMissed(false)}>收件箱</button>
@@ -250,14 +296,21 @@ export function PlannerPage() {
             backlog.isPending ? <Loading /> :
             queue.length ? <ul>{queue.map(task => <li key={task.id}>
               <button type="button" className={highlighted === task.id ? 'highlighted' : ''}
-                aria-pressed={armed?.id === task.id} onClick={() => setArmed(armed?.id === task.id ? null : task)}>
+                aria-pressed={armed?.id === task.id} onClick={() => {
+                  setArmed(armed?.id === task.id ? null : task)
+                  if (mobileBacklog) setMobileBacklog(false)
+                }}>
                 <strong>{task.title}</strong>
+                {task.estimated_minutes && <small>{task.estimated_minutes} 分钟</small>}
                 {task.due_date && <small>{dateLabel(task.due_date)}</small>}
               </button>
             </li>)}</ul> : <p>没有待安排的任务</p>}
         </div>
       </aside>
+      {!stacked && <PaneGrip pane={backlogPane} />}</div>
       <div className="planner-plan">
+        {past.isError && <ErrorBox message={errorText(past.error)} retry={() => void past.refetch()} />}
+        {!calendar && day && <WeekStrip selected={day} today={today} />}
         {armed && <div className="planner-place">
           <strong>{armed.title}</strong>
           <button className="primary" onClick={() => setEditor({task: armed, target})}>
@@ -269,17 +322,25 @@ export function PlannerPage() {
           plan.isPending ? <Loading /> : <>
           {calendar && <section className="planner-panel">
             <header><CalendarDays size={18} /><h2>{byMonth ? dateLabel(first, {month: 'long', year: 'numeric'}) :
-              dateLabel(first) + ' – ' + dateLabel(shift(first, 6))}</h2></header>
+              dateLabel(first) + ' – ' + dateLabel(shift(first, 6))}</h2>
+              <div className="calendar-paging">
+                <IconButton icon={ChevronLeft} label={byMonth ? '上个月' : '前一周'} onClick={() => movePeriod(-1)} />
+                <IconButton icon={ChevronRight} label={byMonth ? '下个月' : '后一周'} onClick={() => movePeriod(1)} />
+              </div>
+            </header>
             <div className={'planner-calendar ' + (byMonth ? 'planner-month' : 'planner-week')}>
               {calendarDays.slice(0, 7).map(date => <span className="planner-weekday" key={date}>{dateLabel(date, {weekday: 'short'})}</span>)}
               {calendarDays.map(date => {
                 const inMonth = !byMonth || date.startsWith(first.slice(0, 7))
-                const items = visible.filter(task => task.scheduled_date === date)
+                const items = visible.filter(task => task.scheduled_date === date).sort(agendaOrder)
                 return <div className="planner-cell" key={date}>
                   <button type="button" aria-label={dayLabel(date)} aria-pressed={date === day}
                     aria-current={date === today ? 'date' : undefined} disabled={!inMonth} onClick={() => selectDay(date)}>
                     <b>{Number(date.slice(-2))}</b>
-                    {items.slice(0, 2).map(task => <span className={'planner-chip ' + task.status} key={task.id}>{task.title}</span>)}
+                    {items.slice(0, 2).map(task => <span className={'planner-chip ' + (task.is_past_plan ? 'past-plan' : task.status)} key={task.id}>
+                      {!byMonth && (task.planned_start_at || task.scheduled_period) && <small>{task.planned_start_at ? timeLabel(task.planned_start_at, zone) : periodLabels[task.scheduled_period!]}</small>}
+                      <span>{task.title}</span>{task.is_past_plan && <small>安排过</small>}
+                    </span>)}
                     {items.length > 2 && <small>+{items.length - 2}</small>}
                   </button>
                 </div>
@@ -290,8 +351,10 @@ export function PlannerPage() {
             </div>
           </section>}
           {day && <section className="planner-panel planner-day">
-            <header><CalendarDays size={18} /><h2>{dayLabel(day)}</h2></header>
-            {agenda.length ? <ul>{agenda.map(row)}</ul> : <p>当天没有安排</p>}
+            <header><CalendarDays size={18} /><h2>{dayLabel(day)}</h2><span className="planner-total">{agenda.length}</span></header>
+            {agenda.length ? <ul>{agenda.map(row)}</ul> : <div className="planner-day-empty"><CalendarDays size={27} aria-hidden="true" /><p>当天没有安排</p>
+              <button className="secondary" onClick={() => edit({ kind: 'task', initial: { scheduled_date: day } })}>安排任务</button>
+            </div>}
           </section>}
         </>}
       </div>

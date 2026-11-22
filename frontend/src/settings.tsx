@@ -1,3 +1,5 @@
+import { LayoutControls } from './pane-layout'
+import { CodexLogin } from './codex-login'
 import { useState } from 'react'
 import { i18n, languageChoices } from './i18n'
 import { useSearchParams } from 'react-router-dom'
@@ -17,6 +19,7 @@ import {
   workspaceLink,
   modelLabel,
   useApi,
+  type Access,
   type Change,
   type Provider,
   type ModelCatalog,
@@ -35,6 +38,7 @@ const states: Record<string, string> = {
 }
 export function General({ settings: s }: { settings: Settings }) {
   const { refresh, notify } = useWorkspace(),
+    access = useApi<Access>('/auth/status'),
     [v, set] = useState({ ...s }),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
@@ -61,6 +65,9 @@ export function General({ settings: s }: { settings: Settings }) {
         }
       }}
     >
+      {access.data?.account && <div className="account-identity">
+        <span>已验证邮箱</span><strong>{access.data.account.email}</strong>
+      </div>}
       <h2>工作区偏好</h2>
       <div className="form-grid">
         <Field label="时区">
@@ -137,12 +144,14 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
       '/ai/chatgpt/guide',
       account && showGuide,
     )
+  const codex = p.id === 'codex'
   const caps = useApi<ModelCatalog>(
     '/ai/models?provider=' + p.id + '&model=' + encodeURIComponent(model),
-    !!model,
+    !!model && !codex,
   )
-  const efforts = caps.data?.efforts ?? p.efforts ?? [],
-    catalog = p.models ?? []
+  const catalog = codex && !p.has_key ? [] : p.models ?? []
+  const selected = p.catalog?.find(entry => entry.id === model)
+  const efforts = codex ? selected?.efforts ?? [] : caps.data?.efforts ?? p.efforts ?? []
   async function run(action: 'save' | 'test' | 'disconnect') {
     setBusy(true)
     setError('')
@@ -151,6 +160,13 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
       if (action === 'disconnect') {
         const result = await api<Provider>('/ai/chatgpt/disconnect', 'POST')
         setNotice(result.detail || '已断开本地授权')
+      } else if (codex && action === 'test') {
+        const provider = await api<Provider>('/ai/providers/codex/test', 'POST')
+        if (provider.status !== 'connected') setError(provider.detail || '模型同步失败')
+        else {
+          setModel(current => provider.models.includes(current) ? current : provider.model ?? '')
+          setNotice('模型目录已更新')
+        }
       } else {
         const changes = {
           enabled,
@@ -202,12 +218,12 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
         <h2>{p.name}</h2>
         <span className={'connection ' + p.status}>
           <i />
-          {states[p.status] ?? p.status}
+          {codex && p.has_key && p.status === 'error' ? '模型同步失败' : states[p.status] ?? p.status}
         </span>
       </div>
-      {p.detail && !notice && <p className="hint">{p.detail}</p>}
+      {p.detail && (!codex || p.has_key) && !notice && <p className="hint">{p.detail}</p>}
       <div className="form-grid">
-        {account ? (
+        {p.id === 'codex' ? <CodexLogin connected={p.has_key} /> : account ? (
           <div className="wide">
             <button
               className="secondary"
@@ -260,22 +276,24 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
           </Field>
         )}
         <Field label="默认模型">
-          {catalog.length ? (
+          {codex || catalog.length ? (
             <select
-              value={model}
+              disabled={busy || !catalog.length}
+              value={catalog.includes(model) ? model : ''}
               onChange={(e) => {
                 setModel(e.target.value)
                 setEffort('auto')
               }}
             >
+              {!catalog.includes(model) && <option value="" disabled>{codex && !p.has_key ? '请先连接 Codex' : catalog.length ? '选择模型' : codex ? '点击「刷新模型」读取目录' : '测试连接以读取模型'}</option>}
               {catalog.map((m) => (
-                <option key={m} value={m}>{modelLabel(caps.data?.catalog ?? p.catalog,m)}</option>
+                <option key={m} value={m}>{modelLabel(codex ? p.catalog : caps.data?.catalog ?? p.catalog, m)}</option>
               ))}
             </select>
           ) : (
             <input
               value={model}
-              readOnly={account}
+              readOnly={account || p.id === 'codex'}
               onChange={(e) => {
                 setModel(e.target.value)
                 setEffort('auto')
@@ -332,11 +350,11 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
         </button>
         <button
           className="secondary"
-          disabled={busy}
+          disabled={busy || (codex && !p.has_key)}
           onClick={() => void run('test')}
         >
           <Link2 size={15} />
-          {busy ? '处理中…' : '测试连接'}
+          {busy ? '处理中…' : codex ? '刷新模型' : '测试连接'}
         </button>
         {account && p.has_key && (
           <button
@@ -375,7 +393,7 @@ export function Providers({ initial='deepseek',guideOpen=false }: {initial?:stri
           </button>
         ))}
       </div>
-      {provider && <ProviderForm key={provider.id} p={provider} guideOpen={guideOpen&&provider.id==='chatgpt'} />}
+      {provider && <ProviderForm key={provider.id + (provider.id === 'codex' && provider.has_key ? (provider.models.length ? '-models' : '-connected') : '')} p={provider} guideOpen={guideOpen&&provider.id==='chatgpt'} />}
     </>
   )
 }
@@ -413,16 +431,17 @@ export function AuditPage() {
                       update: '更新',
                       delete: '删除',
                       undo: '撤销',
+                      day_released: '已回到待安排',
                     } as Record<string, string>
                   )[c.action] ?? c.action}{' '}
-                  · {c.source === 'ai' ? '织日助手' : '手动操作'} ·{' '}
+                  · {c.source === 'calendar' ? '日历' : c.source === 'ai' ? '织日助手' : '手动操作'} ·{' '}
                   <AuditTime iso={c.created_at} />
                 </p>
               </div>
               {c.undone_at ? (
                 <small>已撤销</small>
               ) : (
-                c.action !== 'undo' && (
+                c.action !== 'undo' && c.action !== 'day_released' && (
                   <button
                     className="secondary"
                     onClick={() =>
@@ -503,10 +522,10 @@ export function SettingsPage() {
           </a>
         </div>
       ) : settings ? (
-        <General
+        <><General
           key={settings.timezone + settings.theme + settings.week_start}
           settings={settings}
-        />
+        /><LayoutControls /></>
       ) : (
         <Loading />
       )}

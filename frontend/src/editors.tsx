@@ -1,3 +1,5 @@
+import { TagPicker } from './tag-picker'
+import { PlanDatePicker, type PlanDate } from './plan-date'
 import { useState, type FormEvent } from 'react'
 import { ExternalLink, Trash2 } from 'lucide-react'
 import {
@@ -11,6 +13,7 @@ import {
   safeUrl,
   workspaceLink,
   statusLabels,
+  taskTags,
   typeLabels,
   type Project,
   type Resource,
@@ -62,26 +65,29 @@ function TaskEditor({
     description: t.description ?? '',
     status: t.status ?? 'todo',
     priority: t.priority ?? 'medium',
-    category: t.category ?? '',
     project_id: t.project_id?.toString() ?? '',
     estimated_minutes: t.estimated_minutes?.toString() ?? '',
     scheduled_date: t.scheduled_date ?? '',
     scheduled_period: t.scheduled_period ?? '',
     planned_start_at: localInput(t.planned_start_at, zone),
     planned_end_at: localInput(t.planned_end_at, zone),
+    planning_window: t.planning_window ?? null,
+    window_start: t.window_start ?? null,
+    due_period: t.due_period ?? '',
     due_date: t.due_date ?? '',
     due_at: localInput(t.due_at, zone),
   })
+  const [tags, setTags] = useState(taskTags(t))
   const [pinned, setPinned] = useState(t.pinned ?? false),
     [links, setLinks] = useState<number[]>(t.resource_ids ?? []),
     [allow, setAllow] = useState(false)
   const { busy, error, submit } = useSubmit(close)
   const props = (key: keyof typeof values) => ({
-    value: values[key],
+    value: values[key] ?? '',
     onChange: (e: { target: { value: string } }) =>
       setValues({ ...values, [key]: e.target.value }),
   })
-  function shiftPlan(date: string) {
+  function shiftPlan(date: string, window: PlanDate['planning_window'] = null, anchor: string | null = null) {
     const previous =
       values.scheduled_date || values.planned_start_at.slice(0, 10)
     const shiftMoment = (local: string) => {
@@ -96,6 +102,8 @@ function TaskEditor({
     setValues({
       ...values,
       scheduled_date: date,
+      planning_window: window ?? null,
+      window_start: anchor,
       scheduled_period: date ? values.scheduled_period : '',
       planned_start_at: shiftMoment(values.planned_start_at),
       planned_end_at: shiftMoment(values.planned_end_at),
@@ -111,7 +119,7 @@ function TaskEditor({
             ...v,
             title: v.title.trim(),
             description: v.description.trim(),
-            category: v.category.trim(),
+            tags,
             project_id: v.project_id ? Number(v.project_id) : null,
             estimated_minutes: v.estimated_minutes
               ? Number(v.estimated_minutes)
@@ -124,6 +132,7 @@ function TaskEditor({
               t.planned_start_at,
             ),
             planned_end_at: toIso(v.planned_end_at, zone, t.planned_end_at),
+            due_period: !v.due_at && v.due_date ? v.due_period || null : null,
             due_date: v.due_at ? null : v.due_date || null,
             due_at: toIso(v.due_at, zone, t.due_at),
             pinned,
@@ -161,19 +170,14 @@ function TaskEditor({
           <Field label="优先级">
             <select {...props('priority')}>{opts(priorityLabels)}</select>
           </Field>
-          <Field label="计划日期">
-            <input
-              type="date"
-              value={values.scheduled_date}
-              onChange={(e) => shiftPlan(e.target.value)}
-            />
-          </Field>
-          <Field label="计划时段">
+          <PlanDatePicker plan={values} zone={zone} change={plan =>
+            shiftPlan(plan.scheduled_date ?? '', plan.planning_window, plan.window_start ?? null)} />
+          {values.scheduled_date && <Field label="计划时段">
             <select {...props('scheduled_period')}>
               <option value="">不限时段</option>
               {opts(periodLabels)}
             </select>
-          </Field>
+          </Field>}
           <Field label="截止日期">
             <input
               type="date"
@@ -181,6 +185,9 @@ function TaskEditor({
               {...props('due_date')}
             />
           </Field>
+          {values.due_date && !values.due_at && <Field label="截止时段"><select {...props('due_period')}>
+            <option value="">不限时段</option>{opts(periodLabels)}
+          </select></Field>}
           <Field label="预计耗时（分钟）">
             <input type="number" min={1} {...props('estimated_minutes')} />
           </Field>
@@ -194,13 +201,7 @@ function TaskEditor({
               ))}
             </select>
           </Field>
-          <Field label="分类">
-            <input
-              maxLength={80}
-              {...props('category')}
-              placeholder="工作、生活、学习…"
-            />
-          </Field>
+          <TagPicker selected={tags} change={setTags} />
           <label className="check-label wide">
             <input
               type="checkbox"

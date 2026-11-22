@@ -10,7 +10,8 @@ from .auth import require_admin
 from .db import get_db
 from .models import Project, Resource, Task, TaskChangeLog, now_iso
 from .records import columns
-from .schemas import SchedulePatch
+from .schemas import SchedulePatch, TagInput
+from .tags import list_tags, create_tag
 from .uploads import open_file, store_upload
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
@@ -21,12 +22,29 @@ def commit(db, value):
     return value
 
 
+@router.get("/tags")
+def tags(db: Session = Depends(get_db)):
+    return list_tags(db)
+
+
+@router.post("/tags")
+def add_tag(data: TagInput, db: Session = Depends(get_db)):
+    return commit(db, create_tag(db, data))
+
+
 @router.get("/tasks")
 def tasks(view: str = "all", q: str | None = Query(None, max_length=500), project_id: int | None = None,
           status: str | None = None, priority: str | None = None, category: str | None = None,
           scheduled_date: date | None = None, due_date: date | None = None, db: Session = Depends(get_db)):
     return services.list_tasks(db, view=view, q=q, project_id=project_id, status=status, priority=priority,
                                category=category, scheduled_date=scheduled_date, due_date=due_date)
+
+
+@router.get("/planner/history")
+def planner_history(start: date, end: date, db: Session = Depends(get_db)):
+    if not 0 <= (end - start).days <= 62:
+        raise DomainError(422, "time.invalid_date")
+    return services.previous_day_plans(db, start, end)
 
 
 @router.post("/tasks", status_code=201)
@@ -152,7 +170,7 @@ def undo(id: int, db: Session = Depends(get_db)):
 def export(db: Session = Depends(get_db)):
     from .ai.models import Conversation, Message
     return {"schema_version": 1, "exported_at": now_iso(), "settings": services.get_settings(db),
-            "tasks": services.list_tasks(db), "projects": services.list_projects(db),
+            "tags": list_tags(db), "tasks": services.list_tasks(db), "projects": services.list_projects(db),
             "resources": services.list_resources(db),
             "conversations": [columns(r, exclude={"account_id"}) for r in db.scalars(select(Conversation).order_by(Conversation.id))],
             "messages": [columns(r, exclude={"tools", "account_id"}) for r in db.scalars(select(Message).order_by(Message.id))],

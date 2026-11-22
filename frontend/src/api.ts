@@ -3,7 +3,7 @@ import { i18n } from './i18n'
 
 export type Id = number
 export type Account = { id: string; username: string }
-export type Access = { authenticated: boolean; signup_enabled: boolean; account: Account | null }
+export type Access = { authenticated: boolean; signup_enabled: boolean; account: (Account & { email: string }) | null }
 export type WorkspaceInfo = { id: string; name: string; role: 'owner' | 'member' }
 let activeAccount: string | undefined
 let activeWorkspace: string | undefined
@@ -21,6 +21,10 @@ export function workspaceHeaders(account = activeAccount, workspace = activeWork
 export function workspaceLink(path: string) {
   return activeWorkspace ? path + (path.includes('?') ? '&' : '?') + 'workspace=' + encodeURIComponent(activeWorkspace) : path
 }
+export type Tag = { id: Id; name: string }
+export function taskTags(task: { tags?: string[]; category?: string | null }): string[] {
+  return task.tags ?? (task.category?.trim() ? [task.category.trim()] : [])
+}
 export type Task = {
   id: Id
   title: string
@@ -28,6 +32,7 @@ export type Task = {
   status: string
   priority: string
   project_id: Id | null
+  tags?: string[]
   category: string | null
   estimated_minutes: number | null
   scheduled_date: string | null
@@ -38,6 +43,8 @@ export type Task = {
   planned_start_at: string | null
   planned_end_at: string | null
   due_date: string | null
+  is_past_plan?: boolean
+  due_period?: 'morning' | 'afternoon' | 'evening' | null
   due_at: string | null
   completed_at: string | null
   pinned: boolean

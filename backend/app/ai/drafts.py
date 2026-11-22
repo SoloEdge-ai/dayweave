@@ -9,7 +9,7 @@ from pydantic import Field
 from app import services
 from app.models import Project
 from app.records import active, lock_for_write
-from app.schemas import ResourceInput, TaskInput
+from app.schemas import ResourceInput, TaskInput, TagNames
 from app.time_rules import apply_time_rules, merge_schedule
 
 from .locale import preference, translate
@@ -23,6 +23,7 @@ class EditableTask(Params):
     title: str | None = Field(None, min_length=1, max_length=500)
     description: str | None = Field(None, max_length=30000)
     category: str | None = Field(None, max_length=300)
+    tags: TagNames | None = None
     project_id: int | None = Field(None, gt=0)
     priority: Literal["low", "medium", "high"] | None = None
     scheduled_date: str | None = None
@@ -32,6 +33,7 @@ class EditableTask(Params):
     planned_start_at: str | None = None
     planned_end_at: str | None = None
     estimated_minutes: int | None = Field(None, gt=0, le=525600)
+    due_period: Literal["morning", "afternoon", "evening"] | None = None
     due_date: str | None = None
     due_at: str | None = None
 
@@ -210,6 +212,10 @@ def edit(db, pending_id, changes):
         if not delta:
             raise HTTPException(422, "请至少修改一项任务属性。")
         current = action["draft_task"]
+        if "category" in delta and "tags" not in delta:
+            name = (delta["category"] or "").strip()
+            delta["tags"] = ([name] if name else []) + current.get("tags", [])[1:]
+            delta["category"] = name
         if "scheduled_date" in delta and delta["scheduled_date"] != current.get(
             "scheduled_date"
         ):

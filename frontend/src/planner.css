@@ -44,12 +44,14 @@
 .planner-workspace button,.planner-editor button,.planner-editor .field input,.planner-editor .field select {min-height:44px}
 .planner-editor .field input,.planner-editor .field select {max-width:100%;min-width:0}
 .planner-agenda-row .icon-btn {min-width:44px}
-@media(max-width:970px) {
-  .planner-columns {grid-template-columns:minmax(0,1fr)}
-  .planner-toolbar > .planner-backlog-toggle {display:inline-flex}
-  .planner-backlog:not(.expanded) {display:none}
-  .planner-queue {max-height:30dvh;overflow:auto}
-}
+.planner-day .planner-agenda-row:has(> .icon-btn),.planner-floating .planner-agenda-row:has(> .icon-btn) {grid-template-columns:minmax(5.3rem,auto) minmax(0,1fr) 44px}
+.planner-agenda-row.past-plan .agenda-task,.planner-chip.past-plan {color:var(--muted)}
+.planner-chip.past-plan {border:1px dashed var(--line)}
+.plan-rollover-note {color:var(--muted);font-size:12px}
+.stacked .planner-toolbar > .planner-backlog-toggle {display:inline-flex}
+.stacked .planner-queue {max-height:30dvh;overflow:auto}
+.backlog-pane {position:relative;min-width:0}
+.backlog-pane.hidden {display:none}
 @media(max-width:550px) {
   .planner-toolbar nav button {padding:0 7px}
   .planner-cell button {padding:3px;min-height:49px}

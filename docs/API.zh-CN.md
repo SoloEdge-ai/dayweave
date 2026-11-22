@@ -30,9 +30,11 @@ sequenceDiagram
 | 方法与路径 | 行为 |
 | --- | --- |
 | `GET /api/health` | 验证服务能否查询已迁移的数据库 |
-| `GET /api/auth/status` | 读取 `authenticated`、`signup_enabled` 及已登录账号的公开 ID 和用户名 |
-| `POST /api/auth/register` | 开放注册时，通过用户名和密码创建独立工作区并登录 |
-| `POST /api/auth/login`、`POST /api/auth/logout` | 使用用户名和密码建立会话，或注销当前会话 |
+| `GET /api/auth/status` | 读取 `authenticated`、`signup_enabled` 及已登录账号的ID、用户名和绑定邮箱 |
+| `POST /api/auth/email-code` | 提交邮箱和用途（register 或 reset）。发信请求等待邮件服务响应。受理后返回 202，已存在与未知邮箱的受理响应相同。邮件服务故障时返回 503，可立即重试；同一请求仍在发送时返回 409。 |
+| `POST /api/auth/register` | 提交 `username`、`email`、至少十个字符的 `password` 和八位数字字符串 `code`，成功后创建账号、个人工作区与会话。 |
+| `POST /api/auth/reset-password` | 提交 `email`、找回密码用的 `code` 以及新 `password`，成功返回 204 并撤销该账号的所有会话。 |
+| `POST /api/auth/login`、`POST /api/auth/logout` | 在 `username` 字段填写用户名或邮箱，凭密码登录；注销时结束当前会话。 |
 | `GET, POST /api/workspaces` | 列出可访问的工作区，或创建新工作区 |
 | `GET, POST /api/workspaces/{id}/members` | 所有者列出成员或添加已有用户名 |
 | `DELETE /api/workspaces/{id}/members/{account_id}` | 所有者移除成员 |
@@ -56,6 +58,8 @@ sequenceDiagram
 要把任务暂放在某周而暂不指定日期，可向计划接口发送 `{"expected_updated_at":"<当前任务的 updated_at>","planning_window":"week","window_start":"2026-11-23"}`。按月安排时，使用 `"planning_window":"month"` 并传入该月第一天，例如 `2026-12-01`。安排到具体日期时传入 `scheduled_date`，并可补充 `scheduled_period`、`planned_start_at` 或 `planned_end_at`。后续修改使用返回任务的新时间戳，以防过期提交覆盖新安排。
 
 向 `PATCH /api/settings` 发送 `{"language":"en"}` 可以设置工作区语言。支持 `zh-CN`、`ja` 和 `en`。切换语言会保留已有用户内容、时区及业务标识。
+
+通过 `GET /api/planner/history?start=YYYY-MM-DD&end=YYYY-MM-DD` 读取含首尾日期的安排历史，起止相差最多 62 天。每条记录含原任务 ID 和 `is_past_plan: true`。执行日过后首次访问工作区时，服务端在同一事务里记录过去的安排并将未完成的任务移回待安排。日界线使用工作区时区，已完成任务保留最后一个执行日。
 
 ### 任务示例
 
@@ -87,11 +91,20 @@ sequenceDiagram
 | `PATCH /api/ai/confirmations/{id}/draft` | 保存变动的任务草稿字段，返回新版本 |
 | `POST /api/ai/confirmations/{id}` | 确认或取消；任务草稿必须带上已审阅的 `version` |
 | `GET /api/ai/chatgpt/guide`、`POST /api/ai/chatgpt/disconnect` | 取得官方配置说明或断开授权 |
+| `POST /api/ai/codex/login`, `GET /api/ai/codex/login`, `POST /api/ai/codex/disconnect` | 为当前账号发起或查询设备登录，或移除本地 Codex 授权。等待授权时会返回该账号专用的验证链接和设备码。 |
 
-聊天请求应包含 `content` 和唯一的 `request_id`。可选字段包括 `provider`、`model`、`reasoning` 与 `conversation_id`。只有重试同一请求时才复用请求 ID。每个 SSE 帧的 `data` 为带有 `type` 字段的 JSON 对象。常见类型包括 `conversation`、`delta`、`tool`、`task_draft`、`confirmation`、`error` 和 `done`。
+聊天请求应包含 `content` 和唯一的 `request_id`。可选字段包括 `provider`、`model`、`reasoning` 与 `conversation_id`。只有重试同一请求时才复用请求 ID。每个 SSE 帧的 `data` 为带有 `type` 字段的 JSON 对象。常见类型包括 `conversation`、`delta`、`tool`、`task_draft`、`confirmation`、`usage`、`error` 和 `done`。
+
+每个 `usage` 事件是当前轮次的累计快照，包含 `total_tokens`、`input_tokens`、`output_tokens` 和 `partial`。`partial` 为真时只汇总有服务商回报的调用。未提供的明细或用量为 null。最终快照保存在助手消息的 `token_usage` 中，重放时复用。任务的 `due_period` 可与 `due_date` 一起使用，取值为 `morning`、`afternoon` 或 `evening`。精确截止时刻使用 `due_at`。
 
 ### 可编辑的任务草稿
 
 1. `task_draft` 事件包含提案 `id`、`version`、`status`、`conflict` 标记和 `drafts` 数组。每项包含原始 `index`、拟创建任务的 `task` 字段和可选的 `resource` 元数据。此时任务和拟新增的资料都处于待确认状态。
 2. 编辑版本 1 的第一项时，向 `PATCH /api/ai/confirmations/{id}/draft` 发送 `{"version":1,"drafts":[{"index":0,"task":{"title":"整理笔记","estimated_minutes":45}}]}`。下一次请求使用服务端返回的版本。过期版本返回 HTTP 409。修改后的卡片会同步保存到聊天记录。
 3. 创建任务时提交 `{"approve":true,"version":2}`，其中版本替换为实际的最新值。计划与截止要求冲突时，用户可明确设置 `allow_due_conflict:true`。取消则提交 `{"approve":false,"version":2}`。返回对象包含 `status`、`result` 和更新后的 `event`。已创建条目带有实际的 `task_id`；取消后任务列表保留原状。
+
+### 工作区标签
+
+`GET /api/tags` 列出工作区标签。`POST /api/tags` 接受 `{"name":"设计"}`，返回已有或新建标签及其 ID。名称会去掉首尾空格，匹配时忽略大小写。各工作区分别保存自己的标签。
+
+任务可以通过 `tags` 字符串数组设置多个标签，空数组清空选择。旧版 `category` 字段对应首个标签。`GET /api/tasks?category=设计` 匹配包含此标签的所有任务。草稿中的新标签会在确认创建时保存。助手也可以单独创建或列出标签。

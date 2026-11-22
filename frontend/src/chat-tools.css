@@ -48,3 +48,7 @@
   .composer .model-select {max-width:calc(100% - 140px);}
   .voice-sources .secondary {white-space:normal;}
 }
+
+.turn-usage { display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 12px; margin-top:9px; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums }
+.plan-window-note { align-self:center; color:var(--muted); font-size:13px }
+.plan-window-note small { display:block; margin-top:3px }

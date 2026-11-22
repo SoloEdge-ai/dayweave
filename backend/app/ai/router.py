@@ -1,7 +1,7 @@
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from pydantic import Field
 from sqlalchemy import select
@@ -67,6 +67,30 @@ def models(
     }
 
 
+@router.post("/codex/login")
+def codex_login(db: DB, response: Response):
+    from . import codex_provider
+    response.headers["Cache-Control"] = "no-store"
+    if provider(db, "codex").secret:
+        return {"state": "connected"}
+    db.commit()
+    return codex_provider.start(db.info["profile_dir"])
+
+
+@router.get("/codex/login")
+def codex_login_status(db: DB, response: Response):
+    from . import codex_provider
+    response.headers["Cache-Control"] = "no-store"
+    return codex_provider.status(db.info["profile_dir"], saved=bool(provider(db, "codex").secret))
+
+
+@router.post("/codex/disconnect", status_code=204)
+def codex_disconnect(db: DB):
+    from . import codex_provider
+    db.commit()
+    codex_provider.disconnect(db.info["profile_dir"])
+
+
 @router.get("/chatgpt/guide")
 def guide(db: DB):
     doc = {
@@ -127,6 +151,7 @@ def conversation(cid: int, db: DB):
                     "model",
                     "provider",
                     "tools",
+                    "token_usage",
                 )
             }
             for m in rows
@@ -140,6 +165,7 @@ def events(factory, req, turn_id, lease, replay):
         if replay:
             msg = session.get(Message, turn.message_id)
             yield {"type": "conversation", "id": turn.conversation_id}
+            yield {"type": "usage", "usage": msg.token_usage}
             yield from msg.tools
             if turn.state == "done":
                 yield {"type": "delta", "text": msg.content}

@@ -19,7 +19,7 @@ if not (ROOT / "frontend/dist/index.html").exists():
 
 def run(directory):
     os.environ["DAYWEAVE_DATA_DIR"] = directory
-    os.environ["DAYWEAVE_ADMIN_PASSWORD"] = secrets.token_urlsafe(24)
+    password = secrets.token_urlsafe(24)
     os.environ["DAYWEAVE_STATIC_DIR"] = str(ROOT / "frontend/dist")
     os.environ["DAYWEAVE_COOKIE_SECURE"] = "0"
     os.chdir(ROOT / "backend")
@@ -71,16 +71,34 @@ def run(directory):
                 tool = {"index": 0, "id": "fixture-call", "type": "function",
                         "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}}
                 choice = {"index": 0, "delta": {"tool_calls": [tool]}, "finish_reason": "tool_calls"}
+            assert body["stream_options"]["include_usage"] is True
             frame = json.dumps({"choices": [choice]}, ensure_ascii=False)
-            return httpx.Response(200, text=f"data: {frame}\n\ndata: [DONE]\n\n",
+            meter = json.dumps({"choices": [], "usage": {"prompt_tokens": 32, "completion_tokens": 8, "total_tokens": 40}})
+            return httpx.Response(200, text=f"data: {frame}\n\ndata: {meter}\n\ndata: [DONE]\n\n",
                                   headers={"Content-Type": "text/event-stream"})
         return httpx.Response(404)
 
     Adapter.client = lambda self: httpx.Client(transport=httpx.MockTransport(simulate))
     command.upgrade(Config("alembic.ini"), "head")
     from app.main import app
+    from app.auth import add_account
+    from app.ai.codex_provider import CodexAdapter
+    from app.ai.providers import provider
+    from app.ai.secrets import seal
+    from app.db import SessionLocal, profile_dir, stored_session
+    with SessionLocal.begin() as db:
+        add_account(db, "admin", "admin@example.org", password)
+        picker = add_account(db, "model-picker", "model-picker@example.org", password)
+        with stored_session(profile_dir(picker.id)) as profile, profile.begin():
+            codex = provider(profile, "codex")
+            codex.secret, codex.status = seal("fixture-only"), "connected"
+    # This account has an approved grant and is still waiting for its first model catalog.
+    CodexAdapter.list_models = lambda self: [
+        {"id": "fixture-fast", "name": "Fixture Fast", "efforts": ["low"], "default": True},
+        {"id": "fixture-deep", "name": "Fixture Deep", "efforts": ["medium", "high"]},
+    ]
     output = Path(directory) / "browser-access.json"
-    output.write_text(json.dumps({"password": os.environ["DAYWEAVE_ADMIN_PASSWORD"]}), encoding="utf-8")
+    output.write_text(json.dumps({"password": password, "mailbox": str(Path(directory) / "mail.jsonl")}), encoding="utf-8")
     print(f"DAYWEAVE_FIXTURE={output}", flush=True)
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=args.port, access_log=False, log_level="warning"))
     def stop_on_parent_exit():
@@ -95,5 +113,6 @@ def run(directory):
 
 
 if __name__ == "__main__":
-    with tempfile.TemporaryDirectory(prefix="dayweave-browser-") as fixture:
+    from mailbox_fixture import mailbox
+    with tempfile.TemporaryDirectory(prefix="dayweave-browser-") as fixture, mailbox(fixture):
         run(fixture)

@@ -10,9 +10,10 @@ from .i18n import DomainError, normalize_language
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
-from .models import CalendarSettings, Project, Resource, Settings, Task, TaskChangeLog, now_iso
+from .models import CalendarSettings, Project, Resource, Settings, Tag, Task, TaskChangeLog, now_iso
 from .records import KINDS, active, audit, columns, finish, links, lock_for_write, snapshot
 from .schemas import ProjectInput, ResourceInput, SettingsInput, TaskInput
+from .tags import resolve_tags
 from .time_rules import apply_time_rules, local_today, merge_schedule, week_bounds
 
 
@@ -79,14 +80,22 @@ def _write_task(db, row, data, source, conversation_id, *, include_change=False)
         merged["due_date"] = None
     if data.get("due_date") and "due_at" not in data:
         merged["due_at"] = None
+    if "category" in data and "tags" not in data:
+        extra = (before or {}).get("tags", [])[1:]
+        name = data["category"]
+        if isinstance(name, str):
+            merged["tags"] = ([name.strip()] if name.strip() else []) + extra
     task = TaskInput.model_validate(merged)
-    temporal = {"scheduled_date", "planned_start_at", "planned_end_at", "due_date", "due_at", "planning_window", "window_start"}
+    temporal = {"scheduled_date", "planned_start_at", "planned_end_at", "due_date", "due_at", "scheduled_period", "due_period", "planning_window", "window_start"}
     changed_time = any((before or {}).get(k) != merged.get(k) for k in temporal)
     apply_time_rules(task, get_settings(db)["timezone"], check_due=changed_time)
     if task.project_id:
         active(db, Project, task.project_id)
     row.resources = links(db, Resource, task.resource_ids)
-    for key, value in task.model_dump(exclude={"resource_ids", "allow_due_conflict"}).items():
+    if before is None or "tags" in data or "category" in data:
+        row.tags = resolve_tags(db, task.tags)
+        task.category = row.tags[0].name if row.tags else ""
+    for key, value in task.model_dump(exclude={"tags", "resource_ids", "allow_due_conflict"}).items():
         setattr(row, key, value.isoformat(timespec="microseconds") if isinstance(value, datetime) else value)
     row.completed_at = (row.completed_at or now_iso()) if row.status == "done" else None
     db.add(row)
@@ -114,6 +123,39 @@ def schedule_task(db, id, patch):
         raise DomainError(422, "task.schedule_empty")
     task, change_id = _write_task(db,row,changes,"manual",None,include_change=True)
     return {"task":task,"change_id":change_id}
+
+
+def release_elapsed_days(db):
+    """Close elapsed assignments without copying or completing their tasks."""
+    zone = get_settings(db)["timezone"]
+    today = local_today(zone)
+    midnight = datetime.combine(today, time(), ZoneInfo(zone)).astimezone(timezone.utc).isoformat(timespec="microseconds")
+    elapsed = (Task.deleted.is_(False), Task.status.in_(("todo", "in_progress")), Task.scheduled_date < today,
+               or_(Task.planned_end_at.is_(None), Task.planned_end_at < midnight))
+    if db.scalar(select(Task.id).where(*elapsed).limit(1)) is None:
+        return
+    lock_for_write(db)
+    for task in db.scalars(select(Task).options(selectinload(Task.resources)).where(*elapsed)):
+        before = snapshot(task)
+        task.scheduled_date = task.scheduled_period = task.planned_start_at = task.planned_end_at = None
+        task.updated_at = now_iso()
+        audit(db, task, "day_released", before, snapshot(task), "calendar", None)
+    db.commit()
+
+
+def previous_day_plans(db, start, end):
+    day = TaskChangeLog.before["scheduled_date"].as_string()
+    rows = db.scalars(select(TaskChangeLog).join(Task, Task.id == TaskChangeLog.entity_id).where(
+        Task.deleted.is_(False), TaskChangeLog.entity_type == "task", TaskChangeLog.action == "day_released",
+        day.between(start.isoformat(), end.isoformat()),
+        or_(Task.scheduled_date.is_(None), Task.scheduled_date != day),
+    ).order_by(TaskChangeLog.id))
+    # Reassigning the same task to the same past date updates the day's display once.
+    visits = {}
+    for row in rows:
+        record = row.before
+        visits[(record["scheduled_date"], row.entity_id)] = {**record, "is_past_plan": True}
+    return list(visits.values())
 
 
 def get_task(db, id):
@@ -147,10 +189,12 @@ def list_tasks(db, *, view="all", q=None, project_id=None, status=None, priority
     if view not in views:
         raise DomainError(422, "task.unknown_view")
     stmt = select(Task).options(selectinload(Task.resources)).where(Task.deleted.is_(False), *views[view])
+    if category:
+        stmt = stmt.where(Task.tags.any(Tag.name_key == category.strip().casefold()))
     if q:
         stmt = stmt.where(or_(Task.title.contains(q, autoescape=True), Task.description.contains(q, autoescape=True)))
     for key, value in (("project_id", project_id), ("status", status), ("priority", priority),
-                       ("category", category), ("scheduled_date", scheduled_date), ("due_date", due_date)):
+                       ("scheduled_date", scheduled_date), ("due_date", due_date)):
         if value is not None:
             if key in {"scheduled_date", "due_date"} and isinstance(value, str):
                 try:
@@ -292,7 +336,7 @@ def undo(db, id, *, source="manual", conversation_id=None):
     lock_for_write(db)
     entry = db.get(TaskChangeLog, id)
     actor = db.info.get("account_id")
-    if (not entry or entry.undone_at or entry.action == "undo" or
+    if (not entry or entry.undone_at or entry.action in {"undo", "day_released"} or
             (actor and entry.entity_type == "settings" and entry.actor_id != actor)):
         raise DomainError(409, "history.cannot_undo")
     query = select(TaskChangeLog.id).where(
@@ -327,6 +371,9 @@ def undo(db, id, *, source="manual", conversation_id=None):
             if restore["project_id"]:
                 active(db, Project, restore["project_id"])
             row.resources = links(db, Resource, restore["resource_ids"])
+            names = restore.get("tags", [restore["category"]] if restore.get("category","").strip() else [])
+            row.tags = resolve_tags(db, names)
+            restore = {**restore, "category": row.tags[0].name if row.tags else ""}
         if model is Resource:
             row.projects = links(db, Project, restore["project_ids"])
             if restore["url"]:
@@ -360,8 +407,11 @@ def dashboard(db):
     output = {"date": day.isoformat(), "tasks": tasks, "focus": [], "resources": [],
               "due_today": [], "due_soon": [], "overdue": [], "missed": []}
     weights = {"high": 0, "medium": 1, "low": 2}
+    released = select(TaskChangeLog.entity_id).where(TaskChangeLog.entity_type == "task", TaskChangeLog.action == "day_released")
+    returned = set(db.scalars(select(Task.id).where(Task.id.in_(released), Task.scheduled_date.is_(None),
+                        Task.planning_window.is_(None), Task.status.in_(("todo", "in_progress")), Task.deleted.is_(False))))
     for task in active_tasks:
-        if task["scheduled_date"] and task["scheduled_date"] < day.isoformat():
+        if task["id"] in returned:
             output["missed"].append(task)
         exact = datetime.fromisoformat(task["due_at"]) if task["due_at"] else None
         deadline = exact.astimezone(zone).date() if exact else date.fromisoformat(task["due_date"]) if task["due_date"] else None

@@ -45,6 +45,7 @@ class Message(AccountPrivate, Base):
     provider: Mapped[str]
     model: Mapped[str]
     created_at: Mapped[str] = mapped_column(default=utcnow)
+    token_usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     tools: Mapped[list] = mapped_column(JSON, default=list)
 
 
