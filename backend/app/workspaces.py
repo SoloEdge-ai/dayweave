@@ -78,6 +78,7 @@ def add_member(workspace: UUID, body: MemberInput, request: Request, db: DB):
         raise DomainError(404, "auth.account_not_found")
     if db.get(WorkspaceMember, (row.id, user.id)) is None:
         db.add(WorkspaceMember(workspace_id=row.id, account_id=user.id))
+    db.commit()
     return {"id": user.id, "username": user.username}
 
 
@@ -90,3 +91,4 @@ def remove_member(workspace: UUID, member: UUID, request: Request, db: DB):
     membership = db.get(WorkspaceMember, (row.id, str(member)))
     if membership:
         db.delete(membership)
+    db.commit()
