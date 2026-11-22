@@ -27,6 +27,29 @@ function audioFixture() {
   return { name: 'fixture.wav', mimeType: 'audio/wav', buffer: Buffer.concat([header, pcm]) }
 }
 
+async function checkDailyRollover(page, today, width) {
+  const api = page.context().request
+  const yesterday = new Date(Date.parse(today + 'T12:00Z') - 86400000).toISOString().slice(0,10)
+  const title = 'Continue document ' + width
+  const task = await call(api, 'POST', '/tasks', {title, status:'in_progress', scheduled_date:yesterday, scheduled_period:'afternoon', due_date:today, due_period:'evening'})
+  await page.goto('/planner?view=today&date=' + yesterday)
+  const old = page.locator('.planner-day .past-plan').filter({hasText:title})
+  await old.getByText('安排过', {exact:true}).waitFor()
+  assert.equal(await old.getByRole('button').count(), 0)
+  await page.goto('/planner?view=today&panel=backlog')
+  await page.getByRole('complementary', {name:'待安排'}).getByRole('button', {name:new RegExp(title)}).tap()
+  await page.getByRole('button', {name:/^排入 ·/}).tap()
+  const editor = page.getByRole('dialog', {name:'编辑安排'})
+  await editor.getByRole('button', {name:'保存安排'}).tap()
+  await editor.waitFor({state:'hidden'})
+  await page.getByRole('button', {name:'完成任务 · ' + title, exact:true}).tap()
+  await page.getByText('任务已完成', {exact:true}).waitFor()
+  const saved = await call(api, 'GET', '/tasks/' + task.id)
+  assert.deepEqual([saved.status,saved.scheduled_date,saved.due_period],['done',today,'evening'])
+  await page.goto('/planner?view=today&date=' + yesterday)
+  await old.getByText('安排过', {exact:true}).waitFor()
+}
+
 async function checkVoicePlanner(page, date, tomorrow, width, height) {
   const request = page.context().request
   const title = 'iPad voice planner ' + width
@@ -599,6 +622,7 @@ try {
       if (width === 820) assert.equal(new Date(planned.window_start + 'T12:00Z').getUTCDay(), 1)
       else assert.equal(planned.window_start.slice(-2), '01')
       await checkVoicePlanner(touch, date, tomorrow, width, height)
+      await checkDailyRollover(touch, date, width)
       await tablet.close()
       console.log('PASS WebKit touch task editor and checkbox at ' + width + 'x' + height)
     }

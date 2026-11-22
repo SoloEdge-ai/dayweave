@@ -55,6 +55,8 @@ sequenceDiagram
 
 Use `view=inbox|today|tomorrow|week|next_week|month|upcoming|all|completed` on the task list. Optional filters include `q`, `project_id`, `category`, `priority`, `status`, `scheduled_date` and `due_date`. Deletes require `?confirm=true`. A schedule/deadline conflict returns HTTP 409. An intentional exception can be saved with `allow_due_conflict: true` after a user decision.
 
+Read historical assignments with `GET /api/planner/history?start=YYYY-MM-DD&end=YYYY-MM-DD`. Dates are inclusive and at most 62 days apart. Each row has the original task ID and `is_past_plan: true`. On the first workspace access after the assigned day, the server records the expired plan and releases its task to the backlog in one transaction. The calendar uses the workspace timezone. Completed tasks retain their last scheduled date.
+
 To reserve a task for an undetermined day in a week, send `{"expected_updated_at":"<current task.updated_at>","planning_window":"week","window_start":"2026-11-23"}` to the schedule endpoint. For a month use `"planning_window":"month"` and its first date, such as `2026-12-01`. For an exact day, supply `scheduled_date` and optional `scheduled_period`, `planned_start_at` or `planned_end_at`. Use the timestamp from the returned task for subsequent changes. A stale timestamp prevents overwriting newer work.
 
 Set the workspace language with `PATCH /api/settings` and `{"language":"en"}`. Supported values are `zh-CN`, `ja` and `en`. Language selection leaves stored user content, local timezone and domain identifiers intact.

@@ -116,6 +116,39 @@ def schedule_task(db, id, patch):
     return {"task":task,"change_id":change_id}
 
 
+def release_elapsed_days(db):
+    """Close elapsed assignments without copying or completing their tasks."""
+    zone = get_settings(db)["timezone"]
+    today = local_today(zone)
+    midnight = datetime.combine(today, time(), ZoneInfo(zone)).astimezone(timezone.utc).isoformat(timespec="microseconds")
+    elapsed = (Task.deleted.is_(False), Task.status.in_(("todo", "in_progress")), Task.scheduled_date < today,
+               or_(Task.planned_end_at.is_(None), Task.planned_end_at < midnight))
+    if db.scalar(select(Task.id).where(*elapsed).limit(1)) is None:
+        return
+    lock_for_write(db)
+    for task in db.scalars(select(Task).options(selectinload(Task.resources)).where(*elapsed)):
+        before = snapshot(task)
+        task.scheduled_date = task.scheduled_period = task.planned_start_at = task.planned_end_at = None
+        task.updated_at = now_iso()
+        audit(db, task, "day_released", before, snapshot(task), "calendar", None)
+    db.commit()
+
+
+def previous_day_plans(db, start, end):
+    day = TaskChangeLog.before["scheduled_date"].as_string()
+    rows = db.scalars(select(TaskChangeLog).join(Task, Task.id == TaskChangeLog.entity_id).where(
+        Task.deleted.is_(False), TaskChangeLog.entity_type == "task", TaskChangeLog.action == "day_released",
+        day.between(start.isoformat(), end.isoformat()),
+        or_(Task.scheduled_date.is_(None), Task.scheduled_date != day),
+    ).order_by(TaskChangeLog.id))
+    # Reassigning the same task to the same past date updates the day's display once.
+    visits = {}
+    for row in rows:
+        record = row.before
+        visits[(record["scheduled_date"], row.entity_id)] = {**record, "is_past_plan": True}
+    return list(visits.values())
+
+
 def get_task(db, id):
     return snapshot(active(db, Task, id))
 
@@ -292,7 +325,7 @@ def undo(db, id, *, source="manual", conversation_id=None):
     lock_for_write(db)
     entry = db.get(TaskChangeLog, id)
     actor = db.info.get("account_id")
-    if (not entry or entry.undone_at or entry.action == "undo" or
+    if (not entry or entry.undone_at or entry.action in {"undo", "day_released"} or
             (actor and entry.entity_type == "settings" and entry.actor_id != actor)):
         raise DomainError(409, "history.cannot_undo")
     query = select(TaskChangeLog.id).where(
@@ -360,8 +393,11 @@ def dashboard(db):
     output = {"date": day.isoformat(), "tasks": tasks, "focus": [], "resources": [],
               "due_today": [], "due_soon": [], "overdue": [], "missed": []}
     weights = {"high": 0, "medium": 1, "low": 2}
+    released = select(TaskChangeLog.entity_id).where(TaskChangeLog.entity_type == "task", TaskChangeLog.action == "day_released")
+    returned = set(db.scalars(select(Task.id).where(Task.id.in_(released), Task.scheduled_date.is_(None),
+                        Task.planning_window.is_(None), Task.status.in_(("todo", "in_progress")), Task.deleted.is_(False))))
     for task in active_tasks:
-        if task["scheduled_date"] and task["scheduled_date"] < day.isoformat():
+        if task["id"] in returned:
             output["missed"].append(task)
         exact = datetime.fromisoformat(task["due_at"]) if task["due_at"] else None
         deadline = exact.astimezone(zone).date() if exact else date.fromisoformat(task["due_date"]) if task["due_date"] else None

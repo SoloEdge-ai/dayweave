@@ -32,6 +32,7 @@ def context(db, conv_id, message_id, settings):
 Local date and time: {now.isoformat(timespec="minutes")} ({settings["timezone"]}).
 Use only the selected workspace and the signed-in account's own settings and provider connections. You cannot switch workspaces or manage members.
 Query tools for real tasks, projects and resources. Creation tools only prepare an editable draft. Only the user's separate confirmation button creates a task.
+An unfinished task returns to the backlog after its assigned local day. A list_tasks_by_date result with is_past_plan=true is a historical assignment, not a completion or a current plan. Replan the same task and never duplicate it to continue work.
 Keep the schedule and deadline separate. Tomorrow afternoon / 明天下午 / 明日の午後 sets a local date and afternoon period, never an invented hour.
 A deadline such as “DDL 为明天晚上” or “due tomorrow evening” sets due_date and due_period=evening. Leave execution fields empty unless the user also specifies when to work. Never invent a clock time.
 For this week, next week or this month without an execution day, use planning_window=week or month and window_start=the local Monday or first of month. Weeks run Monday through Sunday. Leave scheduled_date and all clock fields empty.

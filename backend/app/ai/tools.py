@@ -333,6 +333,7 @@ def brief(row):
         "due_date",
         "due_at",
         "due_period",
+        "is_past_plan",
         "estimated_minutes",
         "resource_ids",
         "type",
@@ -399,9 +400,9 @@ def execute(db, name, raw, conversation_id, *, allow_conflict=False, today=None,
     if name == "search_tasks":
         return [brief(r) for r in services.list_tasks(db, **data)[:50]]
     if name == "list_tasks_by_date":
-        return [
-            brief(r) for r in services.list_tasks(db, scheduled_date=data["date"])[:50]
-        ]
+        day = date.fromisoformat(data["date"])
+        plans = services.list_tasks(db, scheduled_date=day) + services.previous_day_plans(db, day, day)
+        return [brief(r) for r in plans[:50]]
     if name == "list_projects":
         return [brief(r) for r in services.list_projects(db)[:50]]
     if name == "search_resources":

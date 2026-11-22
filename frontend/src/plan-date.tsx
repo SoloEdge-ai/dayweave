@@ -43,5 +43,6 @@ export function PlanDatePicker({ plan, zone, change }: { plan: PlanDate; zone: s
       <div className="plan-window-note">{dateLabel(anchor)} – {dateLabel(end)}<small>具体日期待安排</small></div>
     </> : (day || pickDate) && <Field label="计划日期"><input type="date" value={day ?? ''}
       onChange={e => { setPickDate(true); selectDay(e.target.value || null) }} /></Field>}
+    {day && !window && <small className="plan-rollover-note wide">当天未完成的任务会回到待安排。</small>}
   </>
 }

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, Inbox, Pencil, Undo2 } from 'lucide-react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Inbox, Pencil, Undo2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { api, dateInZone, dateLabel, errorText, periodLabels, timeLabel, useApi, type Dashboard, type Task } from './api'
 import { localInput, toIso } from './datetime'
@@ -13,7 +13,7 @@ const scopes = {
   today: '今天', tomorrow: '明天', week: '本周', next_week: '下周', month: '本月',
 }
 type Scope = keyof typeof scopes
-const open = (task: Task) => task.status === 'todo' || task.status === 'in_progress'
+const open = (task: Task) => !task.is_past_plan && (task.status === 'todo' || task.status === 'in_progress')
 const periodOrder: Record<string, string> = { morning: '06:00', afternoon: '12:00', evening: '18:00' }
 const dayLabel = (date: string) => dateLabel(date, { weekday: 'long', month: 'short', day: 'numeric' })
 const dateParam = (value: string | null) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
@@ -189,7 +189,10 @@ export function PlannerPage() {
   const day = calendar ? (focus && calendarDays.includes(focus) ? focus : null) :
     custom ? focus : scope === 'tomorrow' ? shift(today, 1) : today
   const last = shift(first, byMonth ? monthDays - 1 : 6)
-  const visible = (plan.data ?? []).filter(task => {
+  const historyStart = calendar ? first : day ?? today
+  const historyEnd = calendar ? last : historyStart
+  const past = useApi<Task[]>('/planner/history?start=' + historyStart + '&end=' + historyEnd, historyStart <= today)
+  const visible = [...(plan.data ?? []), ...(past.data ?? [])].filter(task => {
     if (task.status === 'cancelled') return false
     if (!anchored) return true
     if (task.scheduled_date) return task.scheduled_date >= first && task.scheduled_date <= last
@@ -239,11 +242,16 @@ export function PlannerPage() {
       {(task.category || task.estimated_minutes) && <small>{[task.category,
         task.estimated_minutes ? task.estimated_minutes + ' ' + '分钟' : null].filter(Boolean).join(' · ')}</small>}
     </>
-    return <li key={task.id} className={['planner-agenda-row', task.status, highlighted === task.id ? 'highlighted' : ''].join(' ')}>
+    return <li key={task.id} className={['planner-agenda-row', task.is_past_plan ? 'past-plan' : task.status, highlighted === task.id ? 'highlighted' : ''].join(' ')}>
       <span>{clock(task, zone)}</span>
       {open(task) ? <button className="agenda-task" onClick={() => setEditor({task})} aria-label={'编辑安排' + ' · ' + task.title}>
         <span>{details}</span><Pencil size={16} aria-hidden="true" />
-      </button> : <div className="agenda-task"><span>{details}</span></div>}
+      </button> : <div className="agenda-task"><span>{details}</span>{task.is_past_plan && <small>安排过</small>}</div>}
+      {open(task) && <IconButton icon={Check} label={'完成任务' + ' · ' + task.title} disabled={busy} onClick={async () => {
+        setBusy(true)
+        try { await api('/tasks/' + task.id, 'PATCH', {status:'done'}); await refresh(); notify('任务已完成') }
+        catch (e) { setError(errorText(e)) } finally { setBusy(false) }
+      }} /> }
     </li>
   }
 
@@ -300,6 +308,7 @@ export function PlannerPage() {
       </aside>
       {!stacked && <PaneGrip pane={backlogPane} />}</div>
       <div className="planner-plan">
+        {past.isError && <ErrorBox message={errorText(past.error)} retry={() => void past.refetch()} />}
         {!calendar && day && <WeekStrip selected={day} today={today} />}
         {armed && <div className="planner-place">
           <strong>{armed.title}</strong>
@@ -327,9 +336,9 @@ export function PlannerPage() {
                   <button type="button" aria-label={dayLabel(date)} aria-pressed={date === day}
                     aria-current={date === today ? 'date' : undefined} disabled={!inMonth} onClick={() => selectDay(date)}>
                     <b>{Number(date.slice(-2))}</b>
-                    {items.slice(0, 2).map(task => <span className={'planner-chip ' + task.status} key={task.id}>
+                    {items.slice(0, 2).map(task => <span className={'planner-chip ' + (task.is_past_plan ? 'past-plan' : task.status)} key={task.id}>
                       {!byMonth && (task.planned_start_at || task.scheduled_period) && <small>{task.planned_start_at ? timeLabel(task.planned_start_at, zone) : periodLabels[task.scheduled_period!]}</small>}
-                      <span>{task.title}</span>
+                      <span>{task.title}</span>{task.is_past_plan && <small>安排过</small>}
                     </span>)}
                     {items.length > 2 && <small>+{items.length - 2}</small>}
                   </button>

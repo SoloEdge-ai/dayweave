@@ -33,6 +33,8 @@ Drag the dividers beside navigation, the assistant, the planner backlog or indiv
 
 In the task editor or assistant draft, choose Today or Tomorrow for a particular day. This Week, Next Week and This Month leave the execution day open. A deadline has its own date and optional time of day. Each assistant reply shows the provider-reported token total, including the calls needed to read project data or prepare a draft.
 
+An unfinished task returns to the backlog after its assigned day in the workspace timezone. An overnight time block stays scheduled through its end date. The calendar keeps the earlier assignment as **Previously planned**. Plan the same task again or choose **Complete task** to finish it. Its status, project and deadline survive rollover. Week and month plans stay open until you choose a day.
+
 **Planner** pairs the backlog with Today, Tomorrow, This Week, Next Week or This Month. Weeks run Monday through Sunday. A task can stay in a week or month until a day is chosen. Select a scheduled task to edit its time, move it to the inbox or undo the change. [Interactive planner design](docs/design/planner.html?lang=en)
 
 In **Settings → AI providers → Codex**, connect your account, choose a default model from its catalog, select a supported reasoning level and save. The same settings are available from chat.

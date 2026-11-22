@@ -431,16 +431,17 @@ export function AuditPage() {
                       update: '更新',
                       delete: '删除',
                       undo: '撤销',
+                      day_released: '已回到待安排',
                     } as Record<string, string>
                   )[c.action] ?? c.action}{' '}
-                  · {c.source === 'ai' ? '织日助手' : '手动操作'} ·{' '}
+                  · {c.source === 'calendar' ? '日历' : c.source === 'ai' ? '织日助手' : '手动操作'} ·{' '}
                   <AuditTime iso={c.created_at} />
                 </p>
               </div>
               {c.undone_at ? (
                 <small>已撤销</small>
               ) : (
-                c.action !== 'undo' && (
+                c.action !== 'undo' && c.action !== 'day_released' && (
                   <button
                     className="secondary"
                     onClick={() =>

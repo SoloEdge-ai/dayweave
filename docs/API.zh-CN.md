@@ -59,6 +59,8 @@ sequenceDiagram
 
 向 `PATCH /api/settings` 发送 `{"language":"en"}` 可以设置工作区语言。支持 `zh-CN`、`ja` 和 `en`。切换语言会保留已有用户内容、时区及业务标识。
 
+通过 `GET /api/planner/history?start=YYYY-MM-DD&end=YYYY-MM-DD` 读取含首尾日期的安排历史，起止相差最多 62 天。每条记录含原任务 ID 和 `is_past_plan: true`。执行日过后首次访问工作区时，服务端在同一事务里记录过去的安排并将未完成的任务移回待安排。日界线使用工作区时区，已完成任务保留最后一个执行日。
+
 ### 任务示例
 
 ```json

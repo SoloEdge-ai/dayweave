@@ -56,6 +56,38 @@ def login(client, root):
     return secret
 
 
+def test_unfinished_day_returns_to_backlog_with_calendar_history(http, monkeypatch):
+    from datetime import date
+    from app import services
+
+    client, root = http
+    login(client, root)
+    day = date(2028, 3, 11)
+    monkeypatch.setattr(services, "local_today", lambda zone: day)
+    task = client.post("/api/tasks", json={
+        "title": "Write onboarding", "scheduled_date": str(day), "scheduled_period": "afternoon",
+        "due_date": "2028-03-17", "due_period": "evening", "status": "in_progress",
+    }).json()
+    task_id = task["id"]
+    url = f"/api/tasks/{task_id}"
+    history = "/api/planner/history?start=2028-03-11&end=2028-03-17"
+    day = date(2028, 3, 12)
+    assert client.get("/api/tasks?view=today").json() == []
+    returned = client.get("/api/tasks?view=inbox").json()
+    assert [row["id"] for row in returned] == [task_id]
+    assert returned[0]["scheduled_date"] is None and returned[0]["scheduled_period"] is None
+    assert (returned[0]["status"], returned[0]["due_date"], returned[0]["due_period"]) == ("in_progress", "2028-03-17", "evening")
+    [record] = client.get(history).json()
+    assert record["id"] == task_id and record["is_past_plan"] and record["scheduled_period"] == "afternoon"
+    assert client.patch(url, json={"scheduled_date":str(day)}).json()["id"] == task_id
+    assert [row["id"] for row in client.get("/api/tasks?view=today").json()] == [task_id]
+    assert client.patch(url, json={"status":"done"}).json()["status"] == "done"
+    day = date(2028, 3, 14)
+    assert client.get("/api/tasks?view=inbox").json() == []
+    assert client.get(history).json() == [record]
+    assert client.get(url).json()["completed_at"]
+
+
 def test_schedule_optimistic_move_conflict_and_undo(http):
     client, root=http
     login(client,root)

@@ -29,6 +29,13 @@ def tasks(view: str = "all", q: str | None = Query(None, max_length=500), projec
                                category=category, scheduled_date=scheduled_date, due_date=due_date)
 
 
+@router.get("/planner/history")
+def planner_history(start: date, end: date, db: Session = Depends(get_db)):
+    if not 0 <= (end - start).days <= 62:
+        raise DomainError(422, "time.invalid_date")
+    return services.previous_day_plans(db, start, end)
+
+
 @router.post("/tasks", status_code=201)
 def create_task(data: dict, db: Session = Depends(get_db)):
     return commit(db, services.create_task(db, data))

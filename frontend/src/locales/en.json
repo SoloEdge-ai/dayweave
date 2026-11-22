@@ -478,5 +478,9 @@
   "本轮用量": "Turn usage",
   "已报告用量": "Reported usage (partial)",
   "输入": "Input",
-  "输出": "Output"
+  "输出": "Output",
+  "安排过": "Previously planned",
+  "当天未完成的任务会回到待安排。": "Unfinished tasks return to the backlog after this day.",
+  "已回到待安排": "Returned to backlog",
+  "日历": "Calendar"
 }

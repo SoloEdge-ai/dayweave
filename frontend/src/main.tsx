@@ -42,6 +42,7 @@ import {
 } from 'lucide-react'
 import {
   api,
+  dateInZone,
   errorText,
   setActiveAccount,
   useApi,
@@ -225,6 +226,26 @@ function Shell({ logout, account, workspace, switcher }: {
       predicate: (q) => q.queryKey[0] !== '/auth/status',
     })
   }, [client])
+  useEffect(() => {
+    const zone = settings.data?.timezone
+    if (!zone) return
+    let day = dateInZone(zone)
+    function updateDay() {
+      const current = dateInZone(zone)
+      if (current !== day) {
+        day = current
+        void refresh()
+      }
+    }
+    const timer = window.setInterval(updateDay, 15000)
+    document.addEventListener('visibilitychange', updateDay)
+    window.addEventListener('focus', updateDay)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', updateDay)
+      window.removeEventListener('focus', updateDay)
+    }
+  }, [settings.data?.timezone, refresh])
   const activateAssistant = planner ? setPlannerAssistant : setAiOpen
   const close = () => activateAssistant(false),
     showAi = (planner ? plannerAssistant : aiOpen) && !full
