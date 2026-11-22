@@ -1,3 +1,4 @@
+import { LayoutControls } from './pane-layout'
 import { CodexLogin } from './codex-login'
 import { useState } from 'react'
 import { i18n, languageChoices } from './i18n'
@@ -143,12 +144,14 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
       '/ai/chatgpt/guide',
       account && showGuide,
     )
+  const codex = p.id === 'codex'
   const caps = useApi<ModelCatalog>(
     '/ai/models?provider=' + p.id + '&model=' + encodeURIComponent(model),
-    !!model,
+    !!model && !codex,
   )
-  const efforts = caps.data?.efforts ?? p.efforts ?? [],
-    catalog = p.models ?? []
+  const catalog = codex && !p.has_key ? [] : p.models ?? []
+  const selected = p.catalog?.find(entry => entry.id === model)
+  const efforts = codex ? selected?.efforts ?? [] : caps.data?.efforts ?? p.efforts ?? []
   async function run(action: 'save' | 'test' | 'disconnect') {
     setBusy(true)
     setError('')
@@ -211,7 +214,7 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
           {states[p.status] ?? p.status}
         </span>
       </div>
-      {p.detail && !notice && <p className="hint">{p.detail}</p>}
+      {p.detail && (!codex || p.has_key) && !notice && <p className="hint">{p.detail}</p>}
       <div className="form-grid">
         {p.id === 'codex' ? <CodexLogin connected={p.has_key} /> : account ? (
           <div className="wide">
@@ -266,16 +269,18 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
           </Field>
         )}
         <Field label="默认模型">
-          {catalog.length ? (
+          {codex || catalog.length ? (
             <select
-              value={model}
+              disabled={busy || !catalog.length}
+              value={catalog.includes(model) ? model : ''}
               onChange={(e) => {
                 setModel(e.target.value)
                 setEffort('auto')
               }}
             >
+              {!catalog.includes(model) && <option value="" disabled>{codex && !p.has_key ? '请先连接 Codex' : catalog.length ? '选择模型' : '测试连接以读取模型'}</option>}
               {catalog.map((m) => (
-                <option key={m} value={m}>{modelLabel(caps.data?.catalog ?? p.catalog,m)}</option>
+                <option key={m} value={m}>{modelLabel(codex ? p.catalog : caps.data?.catalog ?? p.catalog, m)}</option>
               ))}
             </select>
           ) : (
@@ -338,7 +343,7 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
         </button>
         <button
           className="secondary"
-          disabled={busy}
+          disabled={busy || (codex && !p.has_key)}
           onClick={() => void run('test')}
         >
           <Link2 size={15} />
@@ -509,10 +514,10 @@ export function SettingsPage() {
           </a>
         </div>
       ) : settings ? (
-        <General
+        <><General
           key={settings.timezone + settings.theme + settings.week_start}
           settings={settings}
-        />
+        /><LayoutControls /></>
       ) : (
         <Loading />
       )}

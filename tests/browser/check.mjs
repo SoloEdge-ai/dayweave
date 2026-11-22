@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium, webkit, devices } from 'playwright'
+import { checkCodexPicker, checkDesktopLayout, checkTabletLayout } from './layout.mjs'
 import { call, fixture } from './session.mjs'
 
 const languageControl = /^(界面语言|Language|言語)/
@@ -372,6 +373,7 @@ try {
   await page.locator('input[type=password]').press('Enter')
   await page.getByRole('heading', { name: '今日总览' }).waitFor()
   const api = page.context().request
+  await checkDesktopLayout(page)
   const { date } = await call(api, 'GET', '/dashboard/today')
   const tomorrow = new Date(Date.parse(date + 'T12:00Z') + 86400000).toISOString().slice(0, 10)
   await page.getByRole('textbox', { name: '快捷录入' }).fill('Browser acceptance task')
@@ -534,6 +536,7 @@ try {
 
   const tabletBrowser = await webkit.launch()
   try {
+    await checkCodexPicker(tabletBrowser, app)
     for (const [width, height] of [[820, 1180], [1180, 820]]) {
       const tablet = await tabletBrowser.newContext({
         ...devices['iPad (gen 11)'], viewport: { width, height }, storageState: await page.context().storageState(),
@@ -541,6 +544,7 @@ try {
       })
       const touch = await tablet.newPage()
       await touch.goto('/')
+      await checkTabletLayout(touch, width)
       await touch.getByRole('button', { name: '打开织日助手' }).tap()
       await touch.getByRole('button', { name: '收起助手' }).tap()
       if (width === 820) await touch.getByRole('button', { name: '打开导航' }).tap()
@@ -592,6 +596,7 @@ try {
   await composer.fill('登录 Codex')
   await page.getByRole('button', {name:'发送', exact:true}).click()
   await page.getByRole('button', {name:'用 Codex 登录'}).waitFor()
+  assert.ok(await page.getByRole('combobox', {name:/^默认模型/}).isDisabled())
   await page.getByText('如何开启设备代码登录？', {exact:true}).click()
   assert.equal(await page.getByRole('link', {name:'打开 ChatGPT'}).getAttribute('href'), 'https://chatgpt.com/')
   await page.getByRole('button', {name:'返回对话'}).click()

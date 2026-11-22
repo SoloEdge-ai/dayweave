@@ -80,9 +80,20 @@ def run(directory):
     command.upgrade(Config("alembic.ini"), "head")
     from app.main import app
     from app.auth import add_account
-    from app.db import SessionLocal
+    from app.ai.providers import provider
+    from app.ai.secrets import seal
+    from app.db import SessionLocal, profile_dir, stored_session
     with SessionLocal.begin() as db:
         add_account(db, "admin", "admin@example.org", password)
+        picker = add_account(db, "model-picker", "model-picker@example.org", password)
+        with stored_session(profile_dir(picker.id)) as profile, profile.begin():
+            codex = provider(profile, "codex")
+            codex.secret, codex.status = seal("fixture-only"), "connected"
+            codex.catalog = [
+                {"id": "fixture-fast", "name": "Fixture Fast", "efforts": ["low"]},
+                {"id": "fixture-deep", "name": "Fixture Deep", "efforts": ["medium", "high"]},
+            ]
+            codex.model, codex.reasoning = "fixture-fast", "low"
     output = Path(directory) / "browser-access.json"
     output.write_text(json.dumps({"password": password, "mailbox": str(Path(directory) / "mail.jsonl")}), encoding="utf-8")
     print(f"DAYWEAVE_FIXTURE={output}", flush=True)

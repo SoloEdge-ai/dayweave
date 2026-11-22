@@ -29,7 +29,11 @@ The [host Caddy configuration](scripts/Caddyfile.lan) listens on a single IPv4 a
 
 Use quick capture to put an unscheduled task in the inbox. Open it to set a project, priority, planned time or deadline. Add a video or document in the library, then use its schedule action to create a linked task. The dashboard combines today's work, focus tasks, resources and deadline reminders. Choose a language at login or in workspace settings. Timezone, theme and model defaults are independent preferences.
 
+Drag the dividers beside navigation, the assistant, the planner backlog or individual board columns. With a keyboard, focus a divider and use the arrow keys. Enter restores automatic sizing. You can also ask the assistant to “set the assistant sidebar width to 520 pixels” and apply the suggested width. This browser remembers widths for each account and fits them to the available space when the device rotates.
+
 **Planner** pairs the backlog with Today, Tomorrow, This Week, Next Week or This Month. Weeks run Monday through Sunday. A task can stay in a week or month until a day is chosen. Select a scheduled task to edit its time, move it to the inbox or undo the change. [Interactive planner design](docs/design/planner.html?lang=en)
+
+In **Settings → AI providers → Codex**, connect your account, choose a default model from its catalog, select a supported reasoning level and save. The same settings are available from chat.
 
 AI is optional. Add credentials in provider settings, test the connection and select a model. ChatGPT plan authorization uses a separate operator workflow and depends on official eligibility. See the [provider guide](docs/AI_PROVIDERS.md).
 

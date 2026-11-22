@@ -448,5 +448,16 @@
   "正在发送…": "Sending…",
   "如何开启设备代码登录？": "How do I enable device code login?",
   "在 ChatGPT 的「设置 → 安全」中开启设备代码登录。如果已经获取设备码，请回到这里取消本次登录，然后重新获取。": "In ChatGPT, open Settings → Security and enable device code login. If you already have a code, return here, cancel the current sign-in and request a new code.",
-  "打开 ChatGPT": "Open ChatGPT"
+  "打开 ChatGPT": "Open ChatGPT",
+  "导航栏": "Navigation",
+  "助手侧栏": "Assistant sidebar",
+  "调整宽度": "Resize column",
+  "栏目宽度": "Column widths",
+  "栏目": "Column",
+  "宽度（像素）": "Width (pixels)",
+  "自适应": "Automatic",
+  "应用宽度": "Apply width",
+  "恢复自适应": "Use automatic width",
+  "请先连接 Codex": "Connect Codex to see models",
+  "栏目宽度已更新": "Column width updated"
 }

@@ -154,9 +154,9 @@ button.agenda-task:hover { background:var(--panel) }
 /* Workspace navigation and status boards share the task editor and filters. */
 .nav-item.active { box-shadow:inset 3px 0 var(--accent); border-radius:4px }
 .primary,.secondary { border-radius:5px }
-.board-scroll { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(215px,1fr); gap:10px; align-items:start;
+.board-scroll { display:flex; gap:10px; align-items:start;
   margin-top:18px; overflow-x:auto; padding:2px 2px 16px; scroll-snap-type:x proximity; overscroll-behavior-inline:contain }
-.board-column { display:flex; flex-direction:column; height:clamp(260px,calc(100dvh - 340px),850px); min-width:0; background:var(--panel); padding:8px; border-radius:6px; scroll-snap-align:start }
+.board-column { position:relative; flex:none; display:flex; flex-direction:column; height:clamp(260px,calc(100dvh - 340px),850px); min-width:0; background:var(--panel); padding:8px; border-radius:6px; scroll-snap-align:start }
 .board-column header { display:flex; gap:7px; align-items:center; color:var(--muted); min-height:40px; padding:0 5px }
 .board-column h2 { font-size:14px; font-weight:600 }
 .board-column .lane-count { font-size:12px; font-variant-numeric:tabular-nums }
@@ -192,7 +192,6 @@ button.agenda-task:hover { background:var(--panel) }
 .space-create button,.space-manager button { min-height:44px }
 @media(max-width:570px) {
   .toolbar:has(.layout-toggle) {flex-wrap:wrap}
-  .board-scroll { grid-auto-columns:minmax(215px,82%); }
 }
 
 .date-shortcuts,.codex-login { display:flex; flex-wrap:wrap; align-items:center; gap:8px }
@@ -203,3 +202,42 @@ button.agenda-task:hover { background:var(--panel) }
 .codex-help summary { min-height:44px; padding-block:11px; cursor:pointer }
 .codex-help a { display:inline-flex; gap:5px; align-items:center; color:var(--accent) }
 .codex-login code { padding:8px 12px; background:var(--panel); font-size:18px; letter-spacing:.1em }
+
+.docked-pane { position:sticky; top:0; align-self:start; min-width:0; height:100dvh }
+.pane-grip {
+  position:absolute; z-index:4; inset-block:0; width:12px; cursor:col-resize;
+  touch-action:none; user-select:none; -webkit-user-select:none; outline-offset:-2px;
+}
+.pane-grip.edge-right { right:-6px }
+.pane-grip.edge-left { left:-6px }
+.pane-grip::after {
+  content:""; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:3px; height:32px; background:var(--faint); border-radius:3px;
+}
+.pane-grip:is(:hover,:focus-visible,:active)::after { background:var(--accent); height:48px }
+.board-column .pane-grip { right:0 }
+.drawer .pane-grip.edge-left { left:0 }
+.drawer .pane-grip.edge-right { right:0 }
+.layout-controls { margin-block-start:16px }
+.work-area { container:work / inline-size }
+.chat { container:assistant / inline-size }
+@container work (max-width:640px) {
+  .topbar { padding-inline:12px }
+  .top-actions { gap:4px }
+  .crumb-base,.top-actions kbd,.assistant-toggle > span:last-child { display:none }
+  .content { padding-inline:16px }
+  .toolbar { flex-wrap:wrap }
+}
+@container assistant (max-width:385px) {
+  .form-grid,.draft-fields,.draft-extra { grid-template-columns:minmax(0,1fr) }
+  .chat-header { padding-inline:12px }
+}
+@media (pointer:coarse) {
+  .pane-grip { inset-block:auto; top:50%; transform:translateY(-50%); height:72px; width:44px }
+  .pane-grip.edge-left { left:-22px }
+  .pane-grip.edge-right { right:-22px }
+  .pane-grip::after { width:4px; height:36px }
+  .drawer .pane-grip.edge-left { left:-6px }
+  .drawer .pane-grip.edge-right { right:-6px }
+  .board-column .pane-grip { right:-5px }
+}

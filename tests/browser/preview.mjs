@@ -98,6 +98,9 @@ try {
       if (name === 'ipad-landscape') {
         await page.getByRole('button', { name: '打开织日助手' }).tap()
         await page.getByRole('dialog', { name: '织日助手' }).waitFor()
+        const divider = page.getByRole('separator', { name:'调整宽度 · 助手侧栏' })
+        await divider.press('Shift+ArrowLeft')
+        await divider.press('Shift+ArrowLeft')
         await page.screenshot({ path: path.join(out, 'ipad-assistant.png'), animations: 'disabled' })
       }
       if (name === 'desktop' || name === 'ipad-portrait' || name === 'phone') {

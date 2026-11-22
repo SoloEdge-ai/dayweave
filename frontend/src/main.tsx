@@ -71,6 +71,7 @@ import {
 } from './ui'
 import './style.css'
 import './workspace.css'
+import { LayoutProvider, PaneGrip, useContainerWidth, usePane } from './pane-layout'
 
 const client = new QueryClient({
   defaultOptions: {
@@ -227,6 +228,11 @@ function Shell({ logout, account, workspace, switcher }: {
   const activateAssistant = planner ? setPlannerAssistant : setAiOpen
   const close = () => activateAssistant(false),
     showAi = (planner ? plannerAssistant : aiOpen) && !full
+  const viewport = useContainerWidth()
+  const navPane = usePane('navigation', mobileNav ? 265 : large ? 206 : 190,
+    mobileNav ? viewport.width - 32 : viewport.width - (showAi && dockAssistant ? 840 : 540))
+  const assistantPane = usePane('assistant', dockAssistant ? Math.min(360, viewport.width * .24) : Math.min(480, viewport.width * .94),
+    dockAssistant ? viewport.width - navPane.size - 520 : viewport.width - 16)
   return (
     <Workspace.Provider
       value={{
@@ -243,9 +249,12 @@ function Shell({ logout, account, workspace, switcher }: {
       <a className="skip-link" href="#main-content">
         跳到主要内容
       </a>
-      <div className={'shell ' + (showAi && dockAssistant ? 'with-ai' : planner && mobileNav ? 'planning-tablet' : '')}>
+      <div ref={viewport.ref} style={mobileNav ? undefined : {
+        gridTemplateColumns: navPane.size + 'px minmax(0, 1fr)' + (showAi && dockAssistant ? ' ' + assistantPane.size + 'px' : '')
+      }} className={'shell ' + (showAi && dockAssistant ? 'with-ai' : planner && mobileNav ? 'planning-tablet' : '')}>
         {!mobileNav && (
-          <SideNav close={() => setNavOpen(false)} logout={logout} account={account} />
+          <div className="docked-pane" id={navPane.id}><SideNav close={() => setNavOpen(false)} logout={logout} account={account} />
+            <PaneGrip pane={navPane} /></div>
         )}
         <div className="work-area">
           <header className="topbar">
@@ -315,16 +324,18 @@ function Shell({ logout, account, workspace, switcher }: {
             </Routes>
           </main>
         </div>
-        {showAi && dockAssistant && <Chat full={false} close={close} />}
+        {showAi && dockAssistant && <div className="docked-pane" id={assistantPane.id}>
+          <Chat full={false} close={close} /><PaneGrip pane={assistantPane} edge="left" /></div>}
       </div>
       {mobileNav && (
         <Dialog.Root open={navOpen} onOpenChange={setNavOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="scrim" />
             <Dialog.Content
-              className="drawer left"
+              className="drawer left" id={navPane.id} style={{ width: navPane.size }}
               aria-describedby={undefined}
             >
+              <PaneGrip pane={navPane} />
               <Dialog.Title className="sr-only">工作区导航</Dialog.Title>
               <Dialog.Close asChild>
                 <button className="drawer-close icon-btn" aria-label="关闭导航">
@@ -341,9 +352,10 @@ function Shell({ logout, account, workspace, switcher }: {
           <Dialog.Portal>
             <Dialog.Overlay className="scrim" />
             <Dialog.Content
-              className="drawer right"
+              className="drawer right" id={assistantPane.id} style={{ width: assistantPane.size }}
               aria-describedby={undefined}
             >
+              <PaneGrip pane={assistantPane} edge="left" />
               <Dialog.Title className="sr-only">织日助手</Dialog.Title>
               <Chat full={false} close={close} />
             </Dialog.Content>
@@ -406,7 +418,7 @@ function App() {
     )
   const { account, signup_enabled } = auth.data
   return (
-    <WorkspaceChooser key={account.id} account={account}>
+    <LayoutProvider key={account.id} account={account.id}><WorkspaceChooser account={account}>
     {(workspace, switcher) => <Shell
       key={workspace.id}
       account={account}
@@ -422,7 +434,7 @@ function App() {
         }
       }}
     />}
-    </WorkspaceChooser>
+    </WorkspaceChooser></LayoutProvider>
   )
 }
 createRoot(document.getElementById('root')!).render(

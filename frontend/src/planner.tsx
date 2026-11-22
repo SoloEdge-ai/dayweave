@@ -6,6 +6,7 @@ import { localInput, toIso } from './datetime'
 import { WeekStrip, shift, monday, weekday } from './week-strip'
 import { Heading } from './pages'
 import { ErrorBox, Field, IconButton, Loading, Modal, useWorkspace } from './ui'
+import { PaneGrip, useContainerWidth, usePane } from './pane-layout'
 import './planner.css'
 
 const scopes = {
@@ -149,6 +150,9 @@ export function PlannerPage() {
   const { settings, refresh, notify, edit } = useWorkspace()
   const zone = settings?.timezone ?? 'Asia/Hong_Kong'
   const [search, setSearch] = useSearchParams()
+  const container = useContainerWidth()
+  const backlogPane = usePane('backlog', Math.min(250, container.width * .24), container.width - 495)
+  const stacked = container.width < 800
   const view = search.get('view')
   const scope = view && Object.hasOwn(scopes, view) ? view as Scope : 'today'
   const focus = dateParam(search.get('date'))
@@ -243,7 +247,7 @@ export function PlannerPage() {
     </li>
   }
 
-  return <div className="planner-workspace">
+  return <div ref={container.ref} className={'planner-workspace' + (stacked ? ' stacked' : '')}>
     <Heading title="日程编排" />
     <div className="planner-toolbar">
       <nav aria-label="计划范围">
@@ -269,7 +273,8 @@ export function PlannerPage() {
         setBusy(false)
       }
     }}><Undo2 size={16} />撤销安排</button>}
-    <div className="planner-columns">
+    <div className="planner-columns" style={{ gridTemplateColumns: stacked ? 'minmax(0,1fr)' : backlogPane.size + 'px minmax(0,1fr)' }}>
+      <div className={'backlog-pane' + (stacked && !mobileBacklog ? ' hidden' : '')} id={backlogPane.id}>
       <aside className={'planner-backlog ' + (mobileBacklog ? 'expanded' : '')} aria-label="待安排">
         <header><Inbox size={18} /><h2>待安排</h2><span className="planner-total">{queue.length}</span></header>
         <div className="planner-queue">
@@ -293,6 +298,7 @@ export function PlannerPage() {
             </li>)}</ul> : <p>没有待安排的任务</p>}
         </div>
       </aside>
+      {!stacked && <PaneGrip pane={backlogPane} />}</div>
       <div className="planner-plan">
         {!calendar && day && <WeekStrip selected={day} today={today} />}
         {armed && <div className="planner-place">

@@ -1,12 +1,25 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { CalendarDays, Check, CheckSquare2, Flag, Plus, X } from 'lucide-react'
 import { api, dateLabel, errorText, priorityLabels, statusLabels, type Task } from './api'
 import { ErrorBox, useWorkspace } from './ui'
+
+import { PaneGrip, useContainerWidth, useLayout, usePane, type Pane } from './pane-layout'
+
+function BoardLane({ id, fallback, available, children }: {
+  id: Pane; fallback: number; available: number; children: ReactNode
+}) {
+  const pane = usePane(id, fallback, available)
+  return <section id={pane.id} className={'board-column state-' + id} style={{ width: pane.size }}>
+    {children}<PaneGrip pane={pane} />
+  </section>
+}
 
 export function TaskBoard({ items, defaults, status, view }: {
   items: Task[]; defaults: Partial<Task>; view: string; status: string | null
 }) {
   const { edit, projects, refresh, notify } = useWorkspace()
+  const { widths } = useLayout()
+  const container = useContainerWidth()
   const [adding, setAdding] = useState('')
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
@@ -26,10 +39,17 @@ export function TaskBoard({ items, defaults, status, view }: {
     finally { setBusy(false) }
   }
   const allowed = view === 'completed' ? ['done'] : ['upcoming', 'inbox'].includes(view) ? ['todo', 'in_progress'] : Object.keys(statusLabels)
-  return <div className="board-scroll" role="region" aria-label="任务看板" tabIndex={0}>
-    {Object.entries(statusLabels).filter(([id]) => allowed.includes(id) && (!status || status === id)).map(([id, label]) => {
+  const lanes = allowed.filter(id => !status || status === id) as Pane[]
+  const available = Math.max(1, container.width - 4)
+  const reserved = lanes.reduce((sum, id) => sum + Math.min(available, widths[id] ?? 0), 0)
+  const automatic = lanes.filter(id => !widths[id]).length
+  const fallback = container.width < 570 ? available * .82 :
+    Math.max(215, (available - reserved - (lanes.length - 1) * 10) / Math.max(1, automatic))
+  return <div ref={container.ref} className="board-scroll" role="region" aria-label="任务看板" tabIndex={0}>
+    {lanes.map(id => {
+      const label = statusLabels[id]
       const cards = items.filter(task => task.status === id)
-      return <section className={'board-column state-' + id} key={id}>
+      return <BoardLane key={id} id={id} fallback={fallback} available={available}>
         <header><span className="state-dot" /><h2>{label}</h2><span className="lane-count">{cards.length}</span>
           <button type="button" className="board-add" aria-label={'添加任务' + ' · ' + label} disabled={busy}
             onClick={() => { setAdding(id); setTitle(''); setError('') }}><Plus size={18} /></button>
@@ -56,7 +76,7 @@ export function TaskBoard({ items, defaults, status, view }: {
           </button></li>
         })}</ul>
 
-      </section>
+      </BoardLane>
     })}
   </div>
 }
