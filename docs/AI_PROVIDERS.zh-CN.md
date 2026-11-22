@@ -4,6 +4,30 @@
 
 DayWeave 将会话、设置、变更回执和待审操作保存在本地 SQLite 数据库中。调用服务商时会发送近期对话片段、本地日期和时间、用户明确设置的规划偏好，以及与请求相关的工具结果。切换服务商时，本地对话仍然保留。各服务商分别使用自己的凭据和额度。
 
+## 使用 Codex 登录
+
+在「设置 → AI 服务商 → Codex」点「用 Codex 登录」，也可以在聊天里说「登录 Codex」。打开验证链接，在 OpenAI 官方页面输入设备码。如页面提示，请在 ChatGPT 安全设置中启用设备码授权。连接后可以选择可用模型，并按需保存为默认服务商。可用模型和套餐资格取决于完成授权的个人账号。[Codex 身份验证](https://developers.openai.com/codex/auth) · [App Server 协议](https://developers.openai.com/codex/app-server)
+
+容器内置固定版本的 Codex CLI。源码部署需要通过 PATH 或 `DAYWEAVE_CODEX_BIN` 提供同版本程序。每次登录和推理都使用临时 Codex 目录。授权凭据加密保存在 DayWeave 账号配置中，可在该账号的多个工作区使用。每轮对话只接收当前用户的聊天上下文和当前工作区的工具结果。断开连接会移除本地授权。等待授权的设备码可以取消，也会过期。OpenAI 设备登录由账号本人批准。
+
+```mermaid
+sequenceDiagram
+    actor User as 用户
+    participant App as DayWeave
+    participant CLI as Codex App Server
+    participant OpenAI
+    User->>App: 发起设备登录
+    App->>CLI: account/login/start
+    CLI-->>User: 通过应用显示验证链接和设备码
+    User->>OpenAI: 授权设备
+    CLI-->>App: 登录完成
+    App->>App: 加密保存到当前账号
+    User->>App: 请求创建任务
+    App->>CLI: 临时会话和编排操作定义
+    CLI-->>App: 提议操作
+    App-->>User: 当前工作区内可编辑的草稿
+```
+
 ## API Key
 
 在**设置**中选择服务商、填写密钥并保存。**测试连接**会使用当前凭据查询服务商的模型目录。测试成功表示目录访问成功；实际聊天会进一步验证所选模型的推理权限、流式输出和工具能力。可以在聊天输入框附近切换模型，也可以在设置中保存默认值。账号目录可能包含无法生成文本或调用本地工具的模型，实际调用失败时界面会显示上游错误。
@@ -54,7 +78,7 @@ Linux 浏览器电脑可在 `backend/` 中使用虚拟环境的 Python 运行同
 在 `backend/` 中运行以下命令。
 
 ```bash
-python -m pytest -q tests/test_ai.py tests/test_ai_oauth.py
+python -m pytest -q tests/test_core_api.py
 ```
 
 这些测试使用模拟服务商、真实 SQLAlchemy 事务和 HTTP 传输测试夹具检查协议兼容性。真实模型行为、第三方账号批准、计费和授权同意取决于运营者提供的凭据。测试夹具验证通过只代表本地流程通过，真实账号仍须单独验证。

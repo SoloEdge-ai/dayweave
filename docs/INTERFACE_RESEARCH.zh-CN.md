@@ -12,6 +12,26 @@
 | [Sunsama](https://help.sunsama.com/docs/usage-guides/timeboxing/) | 工作时段把任务和预计时长放进日历，触屏设备可以点开时段调整安排。 | 日程行展示时间、标题和预计时长，点整行即可编辑。 |
 | [Akiflow](https://product.akiflow.com/articles/9441910-meet-aki-your-personal-assistant) | Aki 支持语音和文字，移动端日历也有语音入口。 | 在助手首屏放置带文字的语音入口。转写、修改草稿、确认创建分别由用户操作。 |
 
+## 记录任务与安排日期
+
+| 参考 | DayWeave 的交互 |
+| --- | --- |
+| 滴答清单支持先写标题，再到详情设置日期，也提供快捷日期入口。[快速开始](https://help.dida365.com/start) · [进阶使用](https://help.dida365.com/tips) | 点状态列顶端的加号即可录入标题。点卡片补充细节。在编排页选择今天或明天会保留时刻或时段。 |
+| Trello 提供同一组卡片的多种视图，切换视图时保留筛选条件。[视图](https://trello.com/guide/activate-views) · [卡片筛选](https://support.atlassian.com/trello/docs/filtering-for-cards-on-a-board/) | 切换列表和看板会保留搜索与筛选。两种布局读取同一工作区的任务，打开同一个编辑器。 |
+| Todoist 的看板按分区展示任务，已有视图可以切换布局。[看板布局](https://www.todoist.com/help/todoist/features/use-the-board-layout-in-todoist-AiAVsyEI) | 今天、本周都能切成看板。每列显示任务数，在列内创建会带入该状态。 |
+
+用户提供的 Jira 截图影响了侧栏、蓝色选中态与浅灰列背景。竖屏时侧栏收起，看板可横向滑动。列内滚动时，加号仍留在列头。创建工作区时可以预览名称，并看清初始可见范围。[横屏看板](previews/ipad-landscape-board.png) · [竖屏看板](previews/ipad-portrait-board.png) · [创建工作区](previews/ipad-portrait-workspace.png)
+
+```mermaid
+flowchart LR
+  Plus[列内加号] --> Title[输入标题] --> Task[工作区任务]
+  Voice[语音或文字] --> Draft[可编辑聊天草稿] --> Confirm[确认创建] --> Task
+  Task --> Board[看板]
+  Task --> List[列表]
+  Task --> Calendar[日历]
+  Calendar --> Date[今天、明天或指定日期]
+```
+
 ## iPad 实际画面
 
 | 横屏 | 竖屏 |

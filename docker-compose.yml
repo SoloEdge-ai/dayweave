@@ -6,6 +6,7 @@ services:
       - "127.0.0.1:${DAYWEAVE_PORT:-8787}:8000"
     environment:
       DAYWEAVE_DATA_DIR: /data
+      DAYWEAVE_CODEX_TMPDIR: /run/dayweave-codex
       DAYWEAVE_SMTP_HOST: ${DAYWEAVE_SMTP_HOST:-}
       DAYWEAVE_SMTP_PORT: ${DAYWEAVE_SMTP_PORT:-587}
       DAYWEAVE_SMTP_SECURITY: ${DAYWEAVE_SMTP_SECURITY:-starttls}
@@ -18,6 +19,8 @@ services:
       DAYWEAVE_TRUSTED_HTTP_BASES: ${DAYWEAVE_TRUSTED_HTTP_BASES:-}
     volumes:
       - workspace:/data
+    tmpfs:
+      - /run/dayweave-codex:rw,nosuid,nodev,mode=0700,uid=10001,gid=10001,size=128m
     init: true
     security_opt:
       - no-new-privileges:true

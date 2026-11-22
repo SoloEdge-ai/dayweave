@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { WeekStrip } from './week-strip'
+import { TaskBoard } from './task-board'
+import { WeekStrip, monday } from './week-strip'
 import { i18n } from './i18n'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -8,6 +9,8 @@ import {
   Bell,
   BookOpen,
   CalendarClock,
+  Columns3,
+  List,
   CalendarDays,
   Check,
   ChevronDown,
@@ -387,12 +390,17 @@ export function HomePage() {
     </>
   )
 }
-export function TasksPage() {
+export function TasksPage({ boardDefault = false }: { boardDefault?: boolean }) {
   const { view = 'all' } = useParams(),
     { edit, projects, settings } = useWorkspace(),
     [params, setParams] = useSearchParams(),
     [filters, setFilters] = useState(false)
   const apiParams = new URLSearchParams(params)
+  const board = params.has('layout') ? params.get('layout') === 'board' : boardDefault
+  apiParams.delete('layout')
+  const hasFilters = apiParams.size > 0
+  const scopeParams = new URLSearchParams(apiParams)
+  if (board) scopeParams.set('layout', 'board')
   apiParams.set('view', view in viewLabels ? view : 'all')
   const query = useApi<Task[]>('/tasks?' + apiParams),
     items = ['today', 'tomorrow'].includes(view)
@@ -411,7 +419,7 @@ export function TasksPage() {
   return (
     <>
       <Heading
-        title={viewLabels[view] ?? '全部任务'}
+        title={boardDefault && board ? '任务看板' : viewLabels[view] ?? '全部任务'}
         sub={
           date
             ? dateLabel(date, {
@@ -436,7 +444,7 @@ export function TasksPage() {
           <Link
             key={v}
             className={v === view ? 'active' : ''}
-            to={'/tasks/' + v}
+            to={{ pathname: '/tasks/' + v, search: scopeParams.toString() }}
           >
             {label}
           </Link>
@@ -461,6 +469,10 @@ export function TasksPage() {
           <SlidersHorizontal size={15} />
           筛选
         </button>
+        <div className="layout-toggle" role="group" aria-label="任务布局">
+          <button type="button" aria-pressed={!board} onClick={() => set('layout', 'list')}><List size={16} />列表</button>
+          <button type="button" aria-pressed={board} onClick={() => set('layout', 'board')}><Columns3 size={16} />看板</button>
+        </div>
       </div>
       {filters && (
         <div className="filters">
@@ -506,7 +518,7 @@ export function TasksPage() {
               />
             </label>
           ))}
-          <button className="text-button" onClick={() => setParams({})}>
+          <button className="text-button" onClick={() => setParams(board ? {layout:'board'} : {layout:'list'})}>
             清除筛选
           </button>
         </div>
@@ -518,7 +530,13 @@ export function TasksPage() {
           message={errorText(query.error)}
           retry={() => void query.refetch()}
         />
-      ) : items.length ? (
+      ) : board ? <TaskBoard key={apiParams.toString()} items={items} view={view} status={params.get('status')} defaults={{
+        scheduled_date: params.get('scheduled_date') || date || (view === 'upcoming' ? dateInZone(settings?.timezone, 1) : null),
+        ...(view === 'week' && !params.get('scheduled_date') ? {planning_window: 'week', window_start: monday(dateInZone(settings?.timezone))} : {}),
+        due_date: params.get('due_date'),
+        project_id: Number(params.get('project_id')) || null, category: params.get('category') ?? '',
+        ...(params.get('priority') ? { priority: params.get('priority')! } : {}),
+      }} /> : items.length ? (
         <div className="rows">
           {items.map((t) => (
             <TaskRow key={t.id} t={t} showDate />
@@ -527,7 +545,7 @@ export function TasksPage() {
       ) : (
         <Empty
           icon={Inbox}
-          title={params.size ? '没有匹配的任务' : '这里还没有任务'}
+          title={hasFilters ? '没有匹配的任务' : '这里还没有任务'}
           action="新建任务"
           onAction={() =>
             edit({ kind: 'task', initial: { scheduled_date: date } })

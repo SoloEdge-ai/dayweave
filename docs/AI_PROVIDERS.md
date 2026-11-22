@@ -6,6 +6,30 @@ DayWeave keeps conversations, settings, change receipts and reviewable actions i
 
 The saved interface language selects Simplified Chinese, Japanese, or English for new AI replies, draft prompts, provider status messages, and change receipts. Switching languages preserves original task titles, notes, and historical conversations. Relative dates in all three languages resolve against the workspace time zone. A draft retains its original local date when reopened on a later day.
 
+## Sign in with Codex
+
+Select **Settings → AI providers → Codex → Sign in with Codex** or ask the assistant to open Codex login. Open the verification link and enter the device code on the official OpenAI page. If prompted, enable device-code authorization in ChatGPT security settings. Once connected, select an available model and save Codex as the default if desired. ChatGPT plan eligibility and model availability follow the account that completes authorization. [Codex authentication](https://developers.openai.com/codex/auth) · [App Server protocol](https://developers.openai.com/codex/app-server)
+
+The container includes the pinned Codex CLI. Source installations need the matching CLI on PATH or at `DAYWEAVE_CODEX_BIN`. Each login and planner turn gets a temporary Codex home. The encrypted grant belongs to one DayWeave account and can be used across its workspaces. A turn receives only that user's conversation and the selected workspace's tool results. Disconnect removes the local grant. A pending code expires or can be cancelled in DayWeave. An actual account holder must approve OpenAI device sign-in.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as DayWeave
+    participant CLI as Codex App Server
+    participant OpenAI
+    User->>App: Start device login
+    App->>CLI: account/login/start
+    CLI-->>User: Verification URL and short code via app
+    User->>OpenAI: Approve device
+    CLI-->>App: Login completed
+    App->>App: Encrypt grant in account profile
+    User->>App: Ask to create a task
+    App->>CLI: Ephemeral turn with planner action schemas
+    CLI-->>App: Proposed action
+    App-->>User: Editable draft in current workspace
+```
+
 ## API keys
 
 Open **Settings**, select a provider, enter its key and save. **Test connection** calls the provider's model catalog using this credential. A successful check means catalog access succeeded. A chat exercises inference permissions, streaming, and tool support for the selected model. Pick a model in the chat composer or save defaults in settings. An account may list models that do not support text generation or local tools. Such a selection surfaces its upstream error when used.
@@ -56,7 +80,7 @@ The inference adapter sends stateless streaming Responses requests with explicit
 Run from `backend/`:
 
 ```bash
-python -m pytest -q tests/test_ai.py tests/test_ai_oauth.py
+python -m pytest -q tests/test_core_api.py
 ```
 
 These tests use a simulated provider, real SQLAlchemy transactions, and HTTP transport fixtures for wire compatibility. Live-model behavior, third-party account approval, billing and consent depend on operator-provided credentials. A successful fixture test does not certify a particular real account.

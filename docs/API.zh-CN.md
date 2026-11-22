@@ -89,6 +89,7 @@ sequenceDiagram
 | `PATCH /api/ai/confirmations/{id}/draft` | 保存变动的任务草稿字段，返回新版本 |
 | `POST /api/ai/confirmations/{id}` | 确认或取消；任务草稿必须带上已审阅的 `version` |
 | `GET /api/ai/chatgpt/guide`、`POST /api/ai/chatgpt/disconnect` | 取得官方配置说明或断开授权 |
+| `POST /api/ai/codex/login`, `GET /api/ai/codex/login`, `POST /api/ai/codex/disconnect` | 为当前账号发起或查询设备登录，或移除本地 Codex 授权。等待授权时会返回该账号专用的验证链接和设备码。 |
 
 聊天请求应包含 `content` 和唯一的 `request_id`。可选字段包括 `provider`、`model`、`reasoning` 与 `conversation_id`。只有重试同一请求时才复用请求 ID。每个 SSE 帧的 `data` 为带有 `type` 字段的 JSON 对象。常见类型包括 `conversation`、`delta`、`tool`、`task_draft`、`confirmation`、`error` 和 `done`。
 

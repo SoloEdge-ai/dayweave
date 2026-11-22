@@ -9,6 +9,8 @@ def key(lang):
 
 # Keys are DayWeave's original Chinese messages so legacy status rows remain readable.
 STRINGS = {
+    "请使用 Codex 设备登录。": ("Sign in with a Codex device code.", "Codex のデバイスコードでログインしてください。"),
+    "Codex 服务暂不可用，请检查连接或重新登录。": ("Codex is unavailable. Check the connection or sign in again.", "Codex を利用できません。接続を確認するかログインし直してください。"),
     "任务草稿": ("Task draft", "タスクの下書き"),
     "新增任务": ("Create task", "タスクを作成"),
     "修改任务": ("Update task", "タスクを更新"),

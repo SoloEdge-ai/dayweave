@@ -12,6 +12,7 @@ DEFAULTS = {
     "deepseek": ("DeepSeek", "https://api.deepseek.com", "deepseek-flash"),
     "openai": ("OpenAI API", "https://api.openai.com/v1", "gpt-5.4"),
     "compatible": ("OpenAI 兼容接口", "", ""),
+    "codex": ("Codex", "codex://app-server", ""),
     "chatgpt": ("ChatGPT", "https://api.openai.com/v1", ""),
 }
 
@@ -22,7 +23,7 @@ class ProviderError(Exception):
 
 def efforts(provider, model, catalog=()):
     item = next((m for m in catalog if m["id"] == model), {})
-    if provider == "chatgpt":
+    if provider in {"chatgpt", "codex"}:
         return ["auto", *[v for v in item.get("efforts", []) if v != "auto"]]
     if provider == "deepseek" and model in {
         "deepseek-flash",

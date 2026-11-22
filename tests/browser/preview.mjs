@@ -105,6 +105,17 @@ try {
         const screenshot = name === 'ipad-portrait' ? 'ipad-draft' : name + '-draft'
         await page.screenshot({ path: path.join(out, screenshot + '.png'), animations: 'disabled' })
       }
+      if (name === 'desktop' || name.startsWith('ipad-')) {
+        await page.goto('/board')
+        await page.getByRole('region', { name: '任务看板' }).getByText('完成导航接口联调', { exact: true }).waitFor()
+        await page.evaluate(() => document.fonts.ready)
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
+        await page.screenshot({ path: path.join(out, name + '-board.png'), animations: 'disabled' })
+        await page.getByRole('button', { name: '管理工作区' }).click()
+        await page.getByRole('button', { name: '新建工作区' }).click()
+        await page.getByLabel('工作区名称').fill('设计团队')
+        await page.screenshot({ path: path.join(out, name + '-workspace.png'), animations: 'disabled' })
+      }
       if (name.startsWith('ipad-')) {
         await page.goto('/planner?view=week&date=' + date)
         await page.locator('.planner-day').getByText('学习 ROS2 tracing', { exact: true }).waitFor()

@@ -21,6 +21,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import {
   BookOpen,
   CalendarDays,
+  Columns3,
   CalendarRange,
   Check,
   ChevronRight,
@@ -90,6 +91,7 @@ function useMedia(query: string) {
 const navEntries = (): [string, string, LucideIcon][] => [
   ['/', '今日总览', LayoutDashboard],
   ['/planner', '日程编排', CalendarRange],
+  ['/board', '任务看板', Columns3],
   ['/tasks/inbox', '收件箱', Inbox],
   ['/tasks/today', '今天', SunMedium],
   ['/tasks/tomorrow', '明天', CalendarDays],
@@ -164,7 +166,8 @@ function Shell({ logout, account, workspace, switcher }: {
     [toast, setToast] = useState(''),
     timer = useRef<ReturnType<typeof setTimeout> | undefined>()
   const planner = loc.pathname === '/planner'
-  const dockAssistant = large && !planner
+  const board = loc.pathname === '/board' || (loc.pathname.startsWith('/tasks/') && new URLSearchParams(loc.search).get('layout') === 'board')
+  const dockAssistant = large && !planner && !board
   const [plannerAssistant, setPlannerAssistant] = useState(false)
   const full = loc.pathname === '/chat',
     title =
@@ -179,8 +182,8 @@ function Shell({ logout, account, workspace, switcher }: {
     document.title = title + ' · 织日 DayWeave'
     setNavOpen(false)
     setPlannerAssistant(false)
-    if (!large) setAiOpen(false)
-  }, [loc.pathname, large, title])
+    if (!large || board) setAiOpen(false)
+  }, [loc.pathname, board, large, title])
   useEffect(() => {
     if (settings.data?.language && settings.data.language !== i18n.language) {
       setLanguage(settings.data.language)
@@ -299,6 +302,7 @@ function Shell({ logout, account, workspace, switcher }: {
           >
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/board" element={<TasksPage boardDefault />} />
               <Route path="/planner" element={<PlannerPage />} />
               <Route path="/tasks/:view" element={<TasksPage />} />
               <Route path="/library" element={<LibraryPage />} />

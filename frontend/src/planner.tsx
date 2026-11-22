@@ -59,6 +59,14 @@ function PlannerEditor({ task, target, close, saved }: {
   const [error, setError] = useState('')
   const endTime = end.slice(11)
 
+  function changeDay(next: string) {
+    if (next && date && endDay) {
+      const span = Math.round((Date.parse(endDay + 'T12:00Z') - Date.parse(date + 'T12:00Z')) / 86400000)
+      setEndDay(shift(next, span))
+    } else if (next) setEndDay(next)
+    setDate(next)
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault()
     if (busy) return
@@ -105,14 +113,11 @@ function PlannerEditor({ task, target, close, saved }: {
               dateLabel(preserveWindow.anchor) + ' – ' + dateLabel(shift(preserveWindow.anchor, 6))}
           </p>}
           {kind === 'day' && <>
-            <Field label="计划日期"><input type="date" required value={date} onChange={e => {
-              const next = e.target.value
-              if (next && date && endDay) {
-                const span = Math.round((Date.parse(endDay + 'T12:00Z') - Date.parse(date + 'T12:00Z')) / 86400000)
-                setEndDay(shift(next, span))
-              } else if (next) setEndDay(next)
-              setDate(next)
-            }} /></Field>
+            <div className="wide date-shortcuts" role="group" aria-label="选择计划日期">
+              <button type="button" aria-pressed={date === dateInZone(zone)} onClick={() => changeDay(dateInZone(zone))}>今天</button>
+              <button type="button" aria-pressed={date === dateInZone(zone, 1)} onClick={() => changeDay(dateInZone(zone, 1))}>明天</button>
+            </div>
+            <Field label="计划日期"><input type="date" required value={date} onChange={e => changeDay(e.target.value)} /></Field>
             <Field label="计划时段"><select value={period} onChange={e => setPeriod(e.target.value)}>
               <option value="">时间待定</option>
               {Object.entries(periodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}

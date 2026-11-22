@@ -12,6 +12,26 @@ A person planning on an iPad needs to answer three questions quickly. What is al
 | [Sunsama](https://help.sunsama.com/docs/usage-guides/timeboxing/) | Its working sessions place tasks on a calendar and keep planned duration visible. Touch users can open a session to adjust it. | Keep time and duration next to the title. Make the full agenda row an edit target. |
 | [Akiflow](https://product.akiflow.com/articles/9441910-meet-aki-your-personal-assistant) | Aki accepts voice and text, including voice capture from a mobile calendar. | Give voice a labeled entry on the assistant's first screen. Keep transcription, draft edits and the final confirmation separate user actions. |
 
+## Capturing and arranging tasks
+
+| Reference | DayWeave interaction |
+| --- | --- |
+| Dida365 starts with a title and lets the user set a date from task details. It also documents date shortcuts. [Quick start](https://help.dida365.com/start) · [Advanced interactions](https://help.dida365.com/tips) | Tap the plus in a status column and type a title. Tap the card for details. In the planner, Today and Tomorrow change the date while keeping the chosen time or day part. |
+| Trello presents the same cards in several views and retains filters when switching board views. [Views](https://trello.com/guide/activate-views) · [Card filters](https://support.atlassian.com/trello/docs/filtering-for-cards-on-a-board/) | Switching between list and board preserves the query. Both layouts use the workspace task endpoint and open the same editor. |
+| Todoist groups cards by section and offers a board layout for existing views. [Board layout](https://www.todoist.com/help/todoist/features/use-the-board-layout-in-todoist-AiAVsyEI) | Open Today or This Week as a board. Each column shows a count and creates a task with the corresponding status. |
+
+The supplied Jira screenshot informed the navigation rail, blue selection and gray columns. In portrait, the rail collapses and the board scrolls horizontally. Each column keeps its add button visible while its cards scroll. Workspace creation previews the name and initial visibility before saving. [Landscape board](previews/ipad-landscape-board.png) · [Portrait board](previews/ipad-portrait-board.png) · [Create workspace](previews/ipad-portrait-workspace.png)
+
+```mermaid
+flowchart LR
+  Plus[Column plus] --> Title[Enter title] --> Task[Workspace task]
+  Voice[Voice or text] --> Draft[Editable chat draft] --> Confirm[Confirm creation] --> Task
+  Task --> Board[Board]
+  Task --> List[List]
+  Task --> Calendar[Calendar]
+  Calendar --> Date[Today, tomorrow or chosen date]
+```
+
 ## Tablet walkthrough
 
 | Landscape | Portrait |

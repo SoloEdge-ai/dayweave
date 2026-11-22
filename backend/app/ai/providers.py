@@ -87,6 +87,8 @@ def configure(db, row, change):
         row.base_url = endpoint
         row.secret, row.catalog, row.status, row.detail = None, [], "unconfigured", ""
     if "api_key" in data:
+        if row.id == "codex":
+            raise HTTPException(422, "请使用 Codex 设备登录。")
         if row.id == "chatgpt":
             raise HTTPException(422, "请通过官方授权连接 ChatGPT。")
         key = data.pop("api_key").get_secret_value().strip()
@@ -121,6 +123,9 @@ def adapter_for(db, row):
         raise ProviderError("此服务商已停用。")
     if not row.secret or not row.base_url:
         raise ProviderError(row.detail or "请先在设置中填写服务商凭据和接口地址。")
+    if row.id == "codex":
+        from .codex_provider import CodexAdapter
+        return CodexAdapter(db.info["profile_dir"])
     credential = (
         oauth.access_token(db, row) if row.id == "chatgpt" else unseal(row.secret)
     )
@@ -128,6 +133,7 @@ def adapter_for(db, row):
 
 
 def test_provider(db, row):
+    db.commit()  # Release scoped SQLite writes before contacting the provider.
     try:
         adapter = adapter_for(db, row)
         catalog = adapter.list_models()

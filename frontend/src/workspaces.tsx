@@ -1,11 +1,15 @@
-import { useState, type FormEvent } from 'react'
+import { createContext, useContext, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { UsersRound } from 'lucide-react'
+import { ArrowRight, Layers3, LockKeyhole, Plus, UsersRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api, errorText, setActiveWorkspace, useApi, type Account, type WorkspaceInfo } from './api'
 import { ErrorBox, Field, Loading, Modal } from './ui'
 
 type Member = Account & { role: 'owner' | 'member' }
+
+type WorkspaceDialog = 'manage' | 'create'
+const WorkspaceDialogs = createContext<(mode: WorkspaceDialog) => void>(() => {})
+export const useWorkspaceDialogs = () => useContext(WorkspaceDialogs)
 
 export function WorkspaceChooser({ account, children }: {
   account: Account
@@ -13,7 +17,7 @@ export function WorkspaceChooser({ account, children }: {
 }) {
   const key = 'dayweave:workspace:' + account.id
   const [preferred, setPreferred] = useState(() => sessionStorage.getItem(key))
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState<WorkspaceDialog | null>(null)
   const workspaces = useApi<WorkspaceInfo[]>('/workspaces')
   const navigate = useNavigate()
   const available = workspaces.data ?? []
@@ -28,21 +32,22 @@ export function WorkspaceChooser({ account, children }: {
     setPreferred(id)
     navigate('/')
   }
-  return <>
+  return <WorkspaceDialogs.Provider value={setEditing}>
     {children(selected, <div className="workspace-switcher">
       <select aria-label="切换工作区" value={selected.id} onChange={e => switchTo(e.target.value)}>
         {available.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
       </select>
-      <button className="secondary manage-workspace" aria-label="管理工作区" onClick={() => setEditing(true)}><UsersRound size={16} /><span>管理工作区</span></button>
+      <button className="secondary manage-workspace" aria-label="管理工作区" onClick={() => setEditing('manage')}><UsersRound size={16} /><span>管理工作区</span></button>
     </div>)}
-    {editing && <WorkspaceEditor selected={selected} close={() => setEditing(false)}
-      created={id => { switchTo(id); setEditing(false) }} />}
-  </>
+    {editing && <WorkspaceEditor initial={editing} selected={selected} close={() => setEditing(null)}
+      created={id => { switchTo(id); setEditing(null) }} />}
+  </WorkspaceDialogs.Provider>
 }
 
-function WorkspaceEditor({ selected, close, created }: {
-  selected: WorkspaceInfo; close: () => void; created: (id: string) => void
+function WorkspaceEditor({ initial, selected, close, created }: {
+  initial: WorkspaceDialog; selected: WorkspaceInfo; close: () => void; created: (id: string) => void
 }) {
+  const [creating, setCreating] = useState(initial === 'create')
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,18 +68,33 @@ function WorkspaceEditor({ selected, close, created }: {
       setBusy(false)
     }
   }
+  if (creating) return <Modal title="创建工作区" close={close}>
+    <form className="space-create" onSubmit={e => void submit(e, async () => {
+      const row = await api<WorkspaceInfo>('/workspaces', 'POST', { name: name.trim() })
+      await client.invalidateQueries({ queryKey: ['/workspaces'] })
+      created(row.id)
+    })}>
+      <div className="modal-body">
+        <div className="space-preview"><span className="space-mark"><Layers3 size={24} /></span>
+          <div><strong>{name.trim() || '新工作区'}</strong><small><LockKeyhole size={13} />仅自己可见</small></div>
+        </div>
+        <Field label="工作区名称"><input autoFocus required maxLength={120} value={name}
+          placeholder="例如：设计团队" onChange={e => setName(e.target.value)} /></Field>
+        <p>创建后可以邀请其他账号协作。</p>
+        {error && <ErrorBox message={error} />}
+      </div>
+      <footer><button type="button" className="secondary" disabled={busy} onClick={() => { setCreating(false); setError('') }}>返回</button>
+        <button className="primary" disabled={busy || !name.trim()}>创建工作区<ArrowRight size={15} /></button></footer>
+    </form>
+  </Modal>
   return <Modal title="管理工作区" close={close}>
     <div className="modal-body workspace-editor">
-      <form onSubmit={e => void submit(e, async () => {
-        const row = await api<WorkspaceInfo>('/workspaces', 'POST', { name })
-        await client.invalidateQueries({queryKey:['/workspaces']})
-        created(row.id)
-      })}>
-        <Field label="工作区名称"><input required maxLength={120} value={name} onChange={e => setName(e.target.value)} /></Field>
-        <button className="primary" disabled={busy}>创建工作区</button>
-      </form>
+      <div className="space-manager"><span className="space-mark"><Layers3 size={20} /></span>
+        <strong>{selected.name}</strong>
+        <button className="secondary" onClick={() => { setCreating(true); setError('') }}><Plus size={15} />新建工作区</button>
+      </div>
       {selected.role === 'owner' && <>
-        <h3>{selected.name} · <span>成员</span></h3>
+        <h3>成员</h3>
         {members.isError && <ErrorBox message={errorText(members.error)} />}
         <ul>{members.data?.map(member => <li key={member.id}>
           <span>{member.username}</span>

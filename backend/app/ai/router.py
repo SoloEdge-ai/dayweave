@@ -1,7 +1,7 @@
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from pydantic import Field
 from sqlalchemy import select
@@ -65,6 +65,32 @@ def models(
         "catalog": p.catalog,
         "efforts": efforts(p.id, model or p.model, p.catalog),
     }
+
+
+@router.post("/codex/login")
+def codex_login(db: DB, response: Response):
+    from . import codex_provider
+    response.headers["Cache-Control"] = "no-store"
+    if provider(db, "codex").secret:
+        return {"state": "connected"}
+    db.commit()
+    return codex_provider.start(db.info["profile_dir"])
+
+
+@router.get("/codex/login")
+def codex_login_status(db: DB, response: Response):
+    from . import codex_provider
+    response.headers["Cache-Control"] = "no-store"
+    if provider(db, "codex").secret:
+        return {"state": "connected"}
+    return codex_provider.status(db.info["profile_dir"])
+
+
+@router.post("/codex/disconnect", status_code=204)
+def codex_disconnect(db: DB):
+    from . import codex_provider
+    db.commit()
+    codex_provider.disconnect(db.info["profile_dir"])
 
 
 @router.get("/chatgpt/guide")

@@ -1,3 +1,4 @@
+import { CodexLogin } from './codex-login'
 import { useState } from 'react'
 import { i18n, languageChoices } from './i18n'
 import { useSearchParams } from 'react-router-dom'
@@ -212,7 +213,7 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
       </div>
       {p.detail && !notice && <p className="hint">{p.detail}</p>}
       <div className="form-grid">
-        {account ? (
+        {p.id === 'codex' ? <CodexLogin connected={p.has_key} /> : account ? (
           <div className="wide">
             <button
               className="secondary"
@@ -280,7 +281,7 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
           ) : (
             <input
               value={model}
-              readOnly={account}
+              readOnly={account || p.id === 'codex'}
               onChange={(e) => {
                 setModel(e.target.value)
                 setEffort('auto')
@@ -380,7 +381,7 @@ export function Providers({ initial='deepseek',guideOpen=false }: {initial?:stri
           </button>
         ))}
       </div>
-      {provider && <ProviderForm key={provider.id} p={provider} guideOpen={guideOpen&&provider.id==='chatgpt'} />}
+      {provider && <ProviderForm key={provider.id + (provider.id === 'codex' && provider.has_key ? '-connected' : '')} p={provider} guideOpen={guideOpen&&provider.id==='chatgpt'} />}
     </>
   )
 }

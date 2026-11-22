@@ -89,6 +89,7 @@ Send the example to `POST /api/tasks`. To complete its returned ID, send `{"stat
 | `PATCH /api/ai/confirmations/{id}/draft` | Save changed task-draft fields and return the new revision |
 | `POST /api/ai/confirmations/{id}` | Approve or cancel. Task drafts require the reviewed `version` with the decision |
 | `GET /api/ai/chatgpt/guide`, `POST /api/ai/chatgpt/disconnect` | Retrieve official setup guidance or disconnect the registration |
+| `POST /api/ai/codex/login`, `GET /api/ai/codex/login`, `POST /api/ai/codex/disconnect` | Start or poll device login for the current account, or remove its local Codex grant. Pending responses include a private verification URL and user code. |
 
 A chat request includes `content` and a unique `request_id`. Optional fields include `provider`, `model`, `reasoning` and `conversation_id`. Reuse a request ID only for the same request. Each SSE frame has a JSON `data` object with a `type` field. Common types are `conversation`, `delta`, `tool`, `task_draft`, `confirmation`, `error` and `done`.
 

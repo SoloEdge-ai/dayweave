@@ -304,3 +304,84 @@ def test_email_ownership_and_password_recovery(http, monkeypatch):
         reset["code"] = (root / (email + ".reset")).read_text()
         monkeypatch.setattr(email_codes, "TTL", 0)
         assert visitor.post("/api/auth/reset-password", json=reset).status_code == 400
+
+
+def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http, monkeypatch):
+    """Exercise the browser's login, polling, chat, draft edit and disconnect requests."""
+    import json
+    from contextlib import contextmanager
+    from queue import Queue
+    from time import monotonic, sleep
+    from app.ai import codex_provider
+    from app.main import app
+
+    client, root = http
+    login(client, root)
+    workspace = client.get("/api/workspaces").json()[0]
+    scope = {"X-DayWeave-Workspace": workspace["id"]}
+    messages = Queue()
+    auth = '{"fixture":"private-grant"}'
+
+    class FixtureRPC:
+        cwd = root
+        auth_file = root / "fixture-grant.json"
+        notifications = []
+
+        def call(self, method, params):
+            if method == "account/login/start":
+                assert params == {"type": "chatgptDeviceCode"}
+                self.auth_file.write_text(auth)
+                return {"loginId": "test", "verificationUrl": "https://auth.openai.com/codex/device", "userCode": "TEST-CODE"}
+            if method == "account/read":
+                return {"account": {"type": "chatgpt"}}
+            if method == "thread/start":
+                assert params["ephemeral"] and params["environments"] == [] and params["sandbox"] == "read-only"
+                return {"thread": {"id": "t"}}
+            assert method == "turn/start"
+            assert params["outputSchema"]["type"] == "object"
+            return {"turn": {"id": "turn"}}
+
+        def models(self):
+            return [{"id": "fixture-model", "name": "Fixture", "default": True, "efforts": ["low"]}]
+
+        def events(self, deadline):
+            text = json.dumps({"calls": [{"name": "create_task", "arguments": json.dumps({"title": "Draft from Codex"})}]})
+            yield {"method": "item/completed", "params": {"turnId": "turn", "item": {"type": "agentMessage", "text": text}}}
+            yield {"method": "turn/completed", "params": {"turn": {"id": "turn", "status": "completed"}}}
+
+    @contextmanager
+    def transport(grant=None):
+        rpc = FixtureRPC()
+        rpc.messages = messages
+        if grant is not None:
+            assert grant == auth
+        yield rpc
+
+    monkeypatch.setattr(codex_provider, "runtime", transport)
+    with TestClient(app) as peer:
+        assert register(peer, root, "peer", "peer-password-123").status_code == 201
+        assert client.post(f"/api/workspaces/{workspace['id']}/members", json={"username": "peer"}).status_code == 201
+        flow = client.post("/api/ai/codex/login", headers=scope)
+        assert flow.json()["user_code"] == "TEST-CODE" and flow.headers["Cache-Control"] == "no-store"
+        assert peer.get("/api/ai/codex/login", headers=scope).json() == {"state": "idle"}
+        messages.put({"method": "account/login/completed", "params": {"loginId": "test", "success": True}})
+        deadline = monotonic() + 5
+        while client.get("/api/ai/codex/login").json()["state"] != "connected":
+            assert monotonic() < deadline
+            sleep(0.025)
+        providers = client.get("/api/ai/providers", headers=scope)
+        assert "private-grant" not in providers.text and "TEST-CODE" not in providers.text
+        assert next(p for p in providers.json() if p["id"] == "codex")["models"] == ["fixture-model"]
+        assert not next(p for p in peer.get("/api/ai/providers", headers=scope).json() if p["id"] == "codex")["has_key"]
+        response = client.post("/api/ai/chat", headers=scope, json={"provider": "codex", "request_id": "codex-test-request", "content": "Create a task"})
+        frames = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: {")]
+        draft = next(frame for frame in frames if frame["type"] == "task_draft")
+        url = f"/api/ai/confirmations/{draft['id']}"
+        assert peer.get(url, headers=scope).status_code == 404
+        assert client.get("/api/tasks", headers=scope).json() == []
+        edited = client.patch(url + "/draft", headers=scope, json={"version": draft["version"], "drafts": [{"index": 0, "task": {"title": "Edited Codex task"}}]})
+        assert edited.status_code == 200 and client.get("/api/tasks", headers=scope).json() == []
+        assert client.post(url, headers=scope, json={"approve": True, "version": edited.json()["version"]}).status_code == 200
+        assert [row["title"] for row in peer.get("/api/tasks", headers=scope).json()] == ["Edited Codex task"]
+        assert client.post("/api/ai/codex/disconnect").status_code == 204
+        assert client.get("/api/ai/codex/login", headers=scope).json() == {"state": "idle"}
