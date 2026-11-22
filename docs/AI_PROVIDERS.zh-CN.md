@@ -8,7 +8,7 @@ DayWeave 将会话、设置、变更回执和待审操作保存在本地 SQLite 
 
 在「设置 → AI 服务商 → Codex」点「用 Codex 登录」，也可以在聊天里说「登录 Codex」。打开验证链接，在 OpenAI 官方页面输入设备码。如页面提示，请在 ChatGPT 安全设置中启用设备码授权。连接后可以选择可用模型，并按需保存为默认服务商。可用模型和套餐资格取决于完成授权的个人账号。[Codex 身份验证](https://developers.openai.com/codex/auth) · [App Server 协议](https://developers.openai.com/codex/app-server)
 
-容器内置固定版本的 Codex CLI。源码部署需要通过 PATH 或 `DAYWEAVE_CODEX_BIN` 提供同版本程序。每次登录和推理都使用临时 Codex 目录。授权凭据加密保存在 DayWeave 账号配置中，可在该账号的多个工作区使用。每轮对话只接收当前用户的聊天上下文和当前工作区的工具结果。断开连接会移除本地授权。等待授权的设备码可以取消，也会过期。OpenAI 设备登录由账号本人批准。
+容器内置固定版本的 Codex CLI。源码部署需要通过 PATH 或 `DAYWEAVE_CODEX_BIN` 提供同版本程序。每次登录和推理都使用临时 Codex 目录。授权凭据加密保存在 DayWeave 账号配置中，可在该账号的多个工作区使用。CLI 确认设备授权后，DayWeave 会先加密保存凭据，再同步模型目录。如果列表为空，点击「刷新模型」即可用已保存的凭据重试。如果开发机未能取得或保存凭据，授权卡会显示失败的环节。每轮对话只接收当前用户的聊天上下文和当前工作区的工具结果。断开连接会移除本地授权。等待授权的设备码可以取消，也会过期。OpenAI 设备登录由账号本人批准。
 
 ```mermaid
 sequenceDiagram
@@ -22,6 +22,7 @@ sequenceDiagram
     User->>OpenAI: 授权设备
     CLI-->>App: 登录完成
     App->>App: 加密保存到当前账号
+    App->>CLI: 同步模型目录（可用已保存的凭据重试）
     User->>App: 请求创建任务
     App->>CLI: 临时会话和编排操作定义
     CLI-->>App: 提议操作

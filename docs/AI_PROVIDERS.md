@@ -10,7 +10,7 @@ The saved interface language selects Simplified Chinese, Japanese, or English fo
 
 Select **Settings → AI providers → Codex → Sign in with Codex** or ask the assistant to open Codex login. Open the verification link and enter the device code on the official OpenAI page. If prompted, enable device-code authorization in ChatGPT security settings. Once connected, select an available model and save Codex as the default if desired. ChatGPT plan eligibility and model availability follow the account that completes authorization. [Codex authentication](https://developers.openai.com/codex/auth) · [App Server protocol](https://developers.openai.com/codex/app-server)
 
-The container includes the pinned Codex CLI. Source installations need the matching CLI on PATH or at `DAYWEAVE_CODEX_BIN`. Each login and planner turn gets a temporary Codex home. The encrypted grant belongs to one DayWeave account and can be used across its workspaces. A turn receives only that user's conversation and the selected workspace's tool results. Disconnect removes the local grant. A pending code expires or can be cancelled in DayWeave. An actual account holder must approve OpenAI device sign-in.
+The container includes the pinned Codex CLI. Source installations need the matching CLI on PATH or at `DAYWEAVE_CODEX_BIN`. Each login and planner turn gets a temporary Codex home. The encrypted grant belongs to one DayWeave account and can be used across its workspaces. DayWeave commits the encrypted grant as soon as the CLI finishes device authorization. Model discovery runs afterward. If the model list is empty, select **Refresh models** using the saved connection. If the server cannot obtain or store credentials, the authorization card identifies the failed step. A turn receives only that user's conversation and the selected workspace's tool results. Disconnect removes the local grant. A pending code expires or can be cancelled in DayWeave. An actual account holder must approve OpenAI device sign-in.
 
 ```mermaid
 sequenceDiagram
@@ -24,6 +24,7 @@ sequenceDiagram
     User->>OpenAI: Approve device
     CLI-->>App: Login completed
     App->>App: Encrypt grant in account profile
+    App->>CLI: Sync model list (retry with saved grant)
     User->>App: Ask to create a task
     App->>CLI: Ephemeral turn with planner action schemas
     CLI-->>App: Proposed action

@@ -160,6 +160,13 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
       if (action === 'disconnect') {
         const result = await api<Provider>('/ai/chatgpt/disconnect', 'POST')
         setNotice(result.detail || '已断开本地授权')
+      } else if (codex && action === 'test') {
+        const provider = await api<Provider>('/ai/providers/codex/test', 'POST')
+        if (provider.status !== 'connected') setError(provider.detail || '模型同步失败')
+        else {
+          setModel(current => provider.models.includes(current) ? current : provider.model ?? '')
+          setNotice('模型目录已更新')
+        }
       } else {
         const changes = {
           enabled,
@@ -211,7 +218,7 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
         <h2>{p.name}</h2>
         <span className={'connection ' + p.status}>
           <i />
-          {states[p.status] ?? p.status}
+          {codex && p.has_key && p.status === 'error' ? '模型同步失败' : states[p.status] ?? p.status}
         </span>
       </div>
       {p.detail && (!codex || p.has_key) && !notice && <p className="hint">{p.detail}</p>}
@@ -278,7 +285,7 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
                 setEffort('auto')
               }}
             >
-              {!catalog.includes(model) && <option value="" disabled>{codex && !p.has_key ? '请先连接 Codex' : catalog.length ? '选择模型' : '测试连接以读取模型'}</option>}
+              {!catalog.includes(model) && <option value="" disabled>{codex && !p.has_key ? '请先连接 Codex' : catalog.length ? '选择模型' : codex ? '点击「刷新模型」读取目录' : '测试连接以读取模型'}</option>}
               {catalog.map((m) => (
                 <option key={m} value={m}>{modelLabel(codex ? p.catalog : caps.data?.catalog ?? p.catalog, m)}</option>
               ))}
@@ -347,7 +354,7 @@ function ProviderForm({ p, guideOpen=false }: { p: Provider; guideOpen?:boolean 
           onClick={() => void run('test')}
         >
           <Link2 size={15} />
-          {busy ? '处理中…' : '测试连接'}
+          {busy ? '处理中…' : codex ? '刷新模型' : '测试连接'}
         </button>
         {account && p.has_key && (
           <button
@@ -386,7 +393,7 @@ export function Providers({ initial='deepseek',guideOpen=false }: {initial?:stri
           </button>
         ))}
       </div>
-      {provider && <ProviderForm key={provider.id + (provider.id === 'codex' && provider.has_key ? '-connected' : '')} p={provider} guideOpen={guideOpen&&provider.id==='chatgpt'} />}
+      {provider && <ProviderForm key={provider.id + (provider.id === 'codex' && provider.has_key ? (provider.models.length ? '-models' : '-connected') : '')} p={provider} guideOpen={guideOpen&&provider.id==='chatgpt'} />}
     </>
   )
 }

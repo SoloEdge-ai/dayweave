@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 import json
+import logging
 import re
 from queue import Empty
 from sqlalchemy.exc import SQLAlchemyError
@@ -14,6 +15,7 @@ from app.db import stored_session
 from .adapters import Call, ProviderError
 from .codex_runtime import ERROR, runtime
 from .models import AIProvider
+from .providers import apply_catalog
 from .secrets import seal, unseal
 
 
@@ -23,6 +25,7 @@ class Login:
     state: str = "starting"
     url: str = ""
     code: str = ""
+    reason: str = ""
 
 
 # The application runs a single ASGI worker. Only transient authorization prompts live in memory.
@@ -36,19 +39,24 @@ def account_lock(directory):
 
 
 def public(login):
+    if login.state == "failed":
+        return {"state": "failed", "reason": login.reason}
     return {"state": login.state, **({"verification_url": login.url, "user_code": login.code}
                                     if login.state == "pending" else {})}
 
 
-def status(directory):
+def status(directory, *, saved=False):
     with guard:
-        return public(sessions[directory]) if directory in sessions else {"state": "idle"}
+        login = sessions.get(directory)
+        if saved and (not login or login.state != "syncing_models"):
+            return {"state": "connected"}
+        return public(login) if login else {"state": "idle"}
 
 
 def start(directory):
     with guard:
         current = sessions.get(directory)
-        if not current or current.state not in {"starting", "pending"}:
+        if not current or current.state not in {"starting", "pending", "syncing_models"}:
             current = sessions[directory] = Login()
             Thread(target=authorize, args=(directory, current), daemon=True).start()
     current.ready.wait(12)
@@ -56,6 +64,7 @@ def start(directory):
 
 
 def authorize(directory, login):
+    stage = "device_start"
     try:
         with runtime() as rpc:
             flow = rpc.call("account/login/start", {"type": "chatgptDeviceCode"})
@@ -69,6 +78,7 @@ def authorize(directory, login):
                     return
                 login.state, login.url, login.code = "pending", flow["verificationUrl"], flow["userCode"]
                 login.ready.set()
+            stage = "device_exchange"
             deadline = monotonic() + 15 * 60
             while monotonic() < deadline:
                 with guard:
@@ -84,31 +94,47 @@ def authorize(directory, login):
                 if msg.get("method") != "account/login/completed":
                     continue
                 event = msg["params"]
-                if event.get("loginId") != flow["loginId"]:
+                # The protocol permits an omitted ID. This private runtime owns one login.
+                if event.get("loginId") not in (None, flow["loginId"]):
                     continue
                 if not event["success"]:
+                    detail = str(event.get("error") or "").lower()
+                    if "expired" in detail:
+                        stage = "expired"
+                    elif re.search(r"\b403\b|forbidden", detail):
+                        stage = "exchange_forbidden"
                     raise ProviderError(ERROR)
-                if (rpc.call("account/read", {"refreshToken": False}).get("account") or {}).get("type") != "chatgpt":
+                stage = "save_grant"
+                # Only the official CLI writes to this fresh, per-flow credential store.
+                grant = rpc.auth_file.read_text(encoding="utf-8")
+                parsed = json.loads(grant)
+                tokens = parsed.get("tokens") if isinstance(parsed, dict) else None
+                if not isinstance(tokens, dict) or not tokens.get("access_token"):
                     raise ProviderError(ERROR)
-                catalog = rpc.models()
-                if not catalog:
-                    raise ProviderError(ERROR)
-                secret = seal(rpc.auth_file.read_text(encoding="utf-8"))
                 with account_lock(directory), guard:
                     if sessions.get(directory) is not login:
                         return
                     with stored_session(directory) as db, db.begin():
                         row = db.get(AIProvider, "codex")
-                        row.secret, row.catalog, row.status, row.detail = secret, catalog, "connected", ""
-                        if row.model not in {m["id"] for m in catalog}:
-                            row.model = next((m["id"] for m in catalog if m["default"]), catalog[0]["id"])
-                            row.reasoning = "auto"
+                        row.secret, row.status, row.detail = seal(grant), "connected", ""
+                    login.state = "syncing_models"
+                stage = "models"
+                catalog = rpc.models()
+                with account_lock(directory), guard:
+                    if sessions.get(directory) is not login:
+                        return
+                    with stored_session(directory) as db, db.begin():
+                        apply_catalog(db.get(AIProvider, "codex"), catalog)
                     login.state = "connected"
                 return
+            stage = "expired"
             raise ProviderError(ERROR)
-    except (ProviderError, OSError, ValueError, KeyError, RuntimeError, SQLAlchemyError):
+    except (ProviderError, OSError, ValueError, KeyError, RuntimeError, SQLAlchemyError) as exc:
+        # Upstream errors may contain tokens, device codes or account identifiers.
+        logging.getLogger(__name__).warning("Codex device flow stage=%s error_type=%s", stage, type(exc).__name__)
         with guard:
-            login.state = "failed"
+            login.state = "connected" if stage == "models" else "failed"
+            login.reason = stage
     finally:
         login.url = login.code = ""
         login.ready.set()

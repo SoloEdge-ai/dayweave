@@ -80,6 +80,7 @@ def run(directory):
     command.upgrade(Config("alembic.ini"), "head")
     from app.main import app
     from app.auth import add_account
+    from app.ai.codex_provider import CodexAdapter
     from app.ai.providers import provider
     from app.ai.secrets import seal
     from app.db import SessionLocal, profile_dir, stored_session
@@ -89,11 +90,11 @@ def run(directory):
         with stored_session(profile_dir(picker.id)) as profile, profile.begin():
             codex = provider(profile, "codex")
             codex.secret, codex.status = seal("fixture-only"), "connected"
-            codex.catalog = [
-                {"id": "fixture-fast", "name": "Fixture Fast", "efforts": ["low"]},
-                {"id": "fixture-deep", "name": "Fixture Deep", "efforts": ["medium", "high"]},
-            ]
-            codex.model, codex.reasoning = "fixture-fast", "low"
+    # This account has an approved grant and is still waiting for its first model catalog.
+    CodexAdapter.list_models = lambda self: [
+        {"id": "fixture-fast", "name": "Fixture Fast", "efforts": ["low"], "default": True},
+        {"id": "fixture-deep", "name": "Fixture Deep", "efforts": ["medium", "high"]},
+    ]
     output = Path(directory) / "browser-access.json"
     output.write_text(json.dumps({"password": password, "mailbox": str(Path(directory) / "mail.jsonl")}), encoding="utf-8")
     print(f"DAYWEAVE_FIXTURE={output}", flush=True)

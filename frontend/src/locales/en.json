@@ -459,5 +459,15 @@
   "应用宽度": "Apply width",
   "恢复自适应": "Use automatic width",
   "请先连接 Codex": "Connect Codex to see models",
-  "栏目宽度已更新": "Column width updated"
+  "栏目宽度已更新": "Column width updated",
+  "开发机未能取得设备码，请重新发起登录。": "The server could not obtain a device code. Start sign-in again.",
+  "开发机未能从 OpenAI 取得授权凭据，请重新发起设备登录。": "The server could not obtain credentials from OpenAI. Start device sign-in again.",
+  "OpenAI 拒绝了开发机的凭据交换请求（403）。请检查账号权限和服务可用性。": "OpenAI rejected the server’s credential exchange (403). Check account permissions and service availability.",
+  "OpenAI 已确认授权，但开发机未能保存凭据。": "OpenAI confirmed authorization. The server could not save the credentials.",
+  "设备码已过期，请重新获取。": "The device code expired. Request a new code.",
+  "正在读取模型目录…": "Loading available models…",
+  "模型同步失败": "Model refresh failed",
+  "模型目录已更新": "Model list updated",
+  "刷新模型": "Refresh models",
+  "点击「刷新模型」读取目录": "Choose Refresh models to load the list"
 }

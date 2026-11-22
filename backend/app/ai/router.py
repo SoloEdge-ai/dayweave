@@ -81,9 +81,7 @@ def codex_login(db: DB, response: Response):
 def codex_login_status(db: DB, response: Response):
     from . import codex_provider
     response.headers["Cache-Control"] = "no-store"
-    if provider(db, "codex").secret:
-        return {"state": "connected"}
-    return codex_provider.status(db.info["profile_dir"])
+    return codex_provider.status(db.info["profile_dir"], saved=bool(provider(db, "codex").secret))
 
 
 @router.post("/codex/disconnect", status_code=204)

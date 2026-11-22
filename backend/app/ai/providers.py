@@ -132,16 +132,22 @@ def adapter_for(db, row):
     return Adapter(row.id, row.base_url, credential)
 
 
+def apply_catalog(row, catalog):
+    if not catalog:
+        raise ProviderError("此账号未返回可用模型。")
+    row.catalog = catalog
+    if row.model not in {model["id"] for model in catalog}:
+        row.model = next((model["id"] for model in catalog if model.get("default")), catalog[0]["id"])
+        row.reasoning = "auto"
+    if row.reasoning not in efforts(row.id, row.model, catalog):
+        row.reasoning = "auto"
+
+
 def test_provider(db, row):
     db.commit()  # Release scoped SQLite writes before contacting the provider.
     try:
         adapter = adapter_for(db, row)
-        catalog = adapter.list_models()
-        if not catalog:
-            raise ProviderError("此账号未返回可用模型。")
-        row.catalog = catalog
-        if not any(m["id"] == row.model for m in catalog):
-            row.model, row.reasoning = catalog[0]["id"], "auto"
+        apply_catalog(row, adapter.list_models())
         row.status, row.detail = "connected", "已通过凭据验证并取得当前账号的模型目录。"
     except ProviderError as exc:
         row.status, row.detail = ("error" if row.secret else "unconfigured"), str(exc)

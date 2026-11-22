@@ -328,7 +328,8 @@ def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http
     workspace = client.get("/api/workspaces").json()[0]
     scope = {"X-DayWeave-Workspace": workspace["id"]}
     messages = Queue()
-    auth = '{"fixture":"private-grant"}'
+    auth = '{"auth_mode":"chatgpt","tokens":{"access_token":"private-grant","refresh_token":"fixture-only"}}'
+    catalog_ready = False
 
     class FixtureRPC:
         cwd = root
@@ -340,8 +341,6 @@ def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http
                 assert params == {"type": "chatgptDeviceCode"}
                 self.auth_file.write_text(auth)
                 return {"loginId": "test", "verificationUrl": "https://auth.openai.com/codex/device", "userCode": "TEST-CODE"}
-            if method == "account/read":
-                return {"account": {"type": "chatgpt"}}
             if method == "thread/start":
                 assert params["ephemeral"] and params["environments"] == [] and params["sandbox"] == "read-only"
                 return {"thread": {"id": "t"}}
@@ -350,6 +349,8 @@ def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http
             return {"turn": {"id": "turn"}}
 
         def models(self):
+            if not catalog_ready:
+                raise codex_provider.ProviderError("Model catalog unavailable")
             return [{"id": "fixture-model", "name": "Fixture", "default": True, "efforts": ["low"]}]
 
         def events(self, deadline):
@@ -372,14 +373,31 @@ def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http
         flow = client.post("/api/ai/codex/login", headers=scope)
         assert flow.json()["user_code"] == "TEST-CODE" and flow.headers["Cache-Control"] == "no-store"
         assert peer.get("/api/ai/codex/login", headers=scope).json() == {"state": "idle"}
-        messages.put({"method": "account/login/completed", "params": {"loginId": "test", "success": True}})
-        deadline = monotonic() + 5
-        while client.get("/api/ai/codex/login").json()["state"] != "connected":
-            assert monotonic() < deadline
-            sleep(0.025)
+        def final_state():
+            deadline = monotonic() + 5
+            while monotonic() < deadline:
+                result = client.get("/api/ai/codex/login", headers=scope).json()
+                if result["state"] in {"failed", "connected"}:
+                    return result
+                sleep(0.025)
+            raise AssertionError("The device flow never finished")
+
+        messages.put({"method": "account/login/completed", "params": {
+            "loginId": "test", "success": False, "error": "403 Forbidden private diagnostic"}})
+        assert final_state() == {"state": "failed", "reason": "exchange_forbidden"}
+        assert not next(p for p in client.get("/api/ai/providers").json() if p["id"] == "codex")["has_key"]
+        assert client.post("/api/ai/codex/login", headers=scope).json()["state"] == "pending"
+        messages.put({"method": "account/login/completed", "params": {"loginId": "another-flow", "success": False}})
+        messages.put({"method": "account/login/completed", "params": {"loginId": None, "success": True}})
+        assert final_state() == {"state": "connected"}, "An approved login was discarded"
         providers = client.get("/api/ai/providers", headers=scope)
         assert "private-grant" not in providers.text and "TEST-CODE" not in providers.text
-        assert next(p for p in providers.json() if p["id"] == "codex")["models"] == ["fixture-model"]
+        saved = next(p for p in providers.json() if p["id"] == "codex")
+        assert saved["has_key"] and not saved["models"]
+        assert client.post("/api/ai/codex/login", headers=scope).json()["state"] == "connected"
+        catalog_ready = True
+        refreshed = client.post("/api/ai/providers/codex/test", headers=scope).json()
+        assert refreshed["models"] == ["fixture-model"] and refreshed["model"] == "fixture-model"
         assert not next(p for p in peer.get("/api/ai/providers", headers=scope).json() if p["id"] == "codex")["has_key"]
         response = client.post("/api/ai/chat", headers=scope, json={"provider": "codex", "request_id": "codex-test-request", "content": "Create a task"})
         frames = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: {")]
