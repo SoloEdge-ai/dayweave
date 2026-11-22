@@ -592,6 +592,8 @@ try {
   await composer.fill('登录 Codex')
   await page.getByRole('button', {name:'发送', exact:true}).click()
   await page.getByRole('button', {name:'用 Codex 登录'}).waitFor()
+  await page.getByText('如何开启设备代码登录？', {exact:true}).click()
+  assert.equal(await page.getByRole('link', {name:'打开 ChatGPT'}).getAttribute('href'), 'https://chatgpt.com/')
   await page.getByRole('button', {name:'返回对话'}).click()
   await composer.fill('创建工作区')
   await page.getByRole('button', {name:'发送', exact:true}).click()

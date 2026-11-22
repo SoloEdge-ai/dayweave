@@ -200,4 +200,6 @@ button.agenda-task:hover { background:var(--panel) }
 .date-shortcuts button[aria-pressed=true] { color:var(--accent); background:var(--tint); border-color:var(--accent) }
 .codex-login { align-items:flex-start; flex-direction:column }
 .codex-login button,.codex-login a { min-height:44px }
+.codex-help summary { min-height:44px; padding-block:11px; cursor:pointer }
+.codex-help a { display:inline-flex; gap:5px; align-items:center; color:var(--accent) }
 .codex-login code { padding:8px 12px; background:var(--panel); font-size:18px; letter-spacing:.1em }

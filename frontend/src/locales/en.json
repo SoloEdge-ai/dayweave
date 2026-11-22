@@ -445,5 +445,8 @@
   "在新标签页打开 OpenAI，输入此设备码授权。": "Open OpenAI in a new tab and enter this device code to authorize.",
   "正在等待授权": "Waiting for authorization",
   "确认断开 Codex？": "Disconnect Codex from this account?",
-  "正在发送…": "Sending…"
+  "正在发送…": "Sending…",
+  "如何开启设备代码登录？": "How do I enable device code login?",
+  "在 ChatGPT 的「设置 → 安全」中开启设备代码登录。如果已经获取设备码，请回到这里取消本次登录，然后重新获取。": "In ChatGPT, open Settings → Security and enable device code login. If you already have a code, return here, cancel the current sign-in and request a new code.",
+  "打开 ChatGPT": "Open ChatGPT"
 }

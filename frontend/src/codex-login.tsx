@@ -46,6 +46,11 @@ export function CodexLogin({ connected }: { connected: boolean }) {
         <a className="primary" href={status.data.verification_url} target="_blank" rel="noreferrer">在 OpenAI 完成登录<ExternalLink size={14} /></a></>}
       <button className="secondary" disabled={busy} onClick={() => void act(true)}>取消</button>
     </> : <button className="primary" disabled={busy} onClick={() => void act()}><Link2 size={15} />用 Codex 登录</button>}
+    {!connected && <details className="codex-help">
+      <summary>如何开启设备代码登录？</summary>
+      <p>在 ChatGPT 的「设置 → 安全」中开启设备代码登录。如果已经获取设备码，请回到这里取消本次登录，然后重新获取。</p>
+      <a href="https://chatgpt.com/" target="_blank" rel="noreferrer">打开 ChatGPT <ExternalLink size={14} /></a>
+    </details>}
     {(error || status.error || state === 'failed') && <ErrorBox message={error || (status.error ? errorText(status.error) : 'Codex 登录未完成，请重试。')} />}
   </div>
 }
