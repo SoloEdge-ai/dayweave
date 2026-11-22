@@ -44,8 +44,12 @@ function PlannerEditor({ task, target, close, saved }: {
 }) {
   const { settings, refresh } = useWorkspace()
   const zone = settings?.timezone ?? 'Asia/Hong_Kong'
-  const [date, setDate] = useState(target && 'date' in target ? target.date : task.scheduled_date ?? dateInZone(zone))
-  const [kind, setKind] = useState('day')
+  const existingWindow = task.planning_window && task.window_start
+    ? {window: task.planning_window, anchor: task.window_start} : undefined
+  const preserveWindow = target ? ('window' in target ? target : undefined) : existingWindow
+  const [date, setDate] = useState(target && 'date' in target ? target.date :
+    task.scheduled_date ?? preserveWindow?.anchor ?? dateInZone(zone))
+  const [kind, setKind] = useState(preserveWindow ? 'window' : 'day')
   const [period, setPeriod] = useState(task.planned_start_at ? 'exact' : task.scheduled_period ?? '')
   const [start, setStart] = useState(localInput(task.planned_start_at, zone).slice(11))
   const [end, setEnd] = useState(localInput(task.planned_end_at, zone))
@@ -57,7 +61,6 @@ function PlannerEditor({ task, target, close, saved }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const endTime = end.slice(11)
-  const preserveWindow = target && 'window' in target ? target : undefined
 
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -100,10 +103,18 @@ function PlannerEditor({ task, target, close, saved }: {
             {preserveWindow && <option value="window">日期待定</option>}
             <option value="inbox">移回收件箱</option>
           </select></Field>
+          {kind === 'window' && preserveWindow && <p className="wide">
+            {preserveWindow.window === 'month' ? dateLabel(preserveWindow.anchor, {month: 'long', year: 'numeric'}) :
+              dateLabel(preserveWindow.anchor) + ' – ' + dateLabel(shift(preserveWindow.anchor, 6))}
+          </p>}
           {kind === 'day' && <>
             <Field label="计划日期"><input type="date" required value={date} onChange={e => {
-              if (endDay === date) setEndDay(e.target.value)
-              setDate(e.target.value)
+              const next = e.target.value
+              if (next && date && endDay) {
+                const span = Math.round((Date.parse(endDay + 'T12:00Z') - Date.parse(date + 'T12:00Z')) / 86400000)
+                setEndDay(shift(next, span))
+              } else if (next) setEndDay(next)
+              setDate(next)
             }} /></Field>
             <Field label="计划时段"><select value={period} onChange={e => setPeriod(e.target.value)}>
               <option value="">时间待定</option>
@@ -195,26 +206,6 @@ export function PlannerPage() {
     setSearch(params, { replace: true })
     if (armed) setEditor({ task: armed, target: { date } })
   }
-  async function place(task: Task, data: Partial<Placement>) {
-    setBusy(true)
-    setError('')
-    try {
-      const result = await api<{task: Task; change_id: number | null}>('/tasks/' + task.id + '/schedule', 'PATCH', {
-        ...data, expected_updated_at: task.updated_at,
-      })
-      setUndo(result.change_id)
-      setArmed(null)
-      setMobileBacklog(false)
-      await refresh()
-      notify('安排已保存')
-    } catch (e) {
-      setError(errorText(e))
-      await refresh()
-      setArmed(null)
-    } finally {
-      setBusy(false)
-    }
-  }
   const row = (task: Task) => <li key={task.id} className={'planner-agenda-row ' + (highlighted === task.id ? 'highlighted' : '')}>
     <span>{clock(task, zone)}</span><strong>{task.title}</strong>
     {open(task) && <IconButton icon={Pencil} label={'编辑安排' + ' · ' + task.title} onClick={() => setEditor({task})} />}
@@ -269,10 +260,9 @@ export function PlannerPage() {
       <div className="planner-plan">
         {armed && <div className="planner-place">
           <strong>{armed.title}</strong>
-          <button className="primary" disabled={busy} onClick={() => {
-            if ('date' in target) setEditor({task: armed, target})
-            else void place(armed, {planning_window: target.window, window_start: target.anchor})
-          }}>{day ? '排入' + ' · ' + dayLabel(day) : '排入待定日期'}</button>
+          <button className="primary" onClick={() => setEditor({task: armed, target})}>
+            {day ? '排入' + ' · ' + dayLabel(day) : '排入待定日期'}
+          </button>
           <button className="secondary" onClick={() => setArmed(null)}>取消</button>
         </div>}
         {plan.isError ? <ErrorBox message={errorText(plan.error)} retry={() => void plan.refetch()} /> :
@@ -310,7 +300,7 @@ export function PlannerPage() {
       setEditor(null)
       setArmed(null)
       setMobileBacklog(false)
-      setUndo(change)
+      if (change !== null) setUndo(change)
       if (task.scheduled_date) {
         if (calendar && task.scheduled_date >= first && task.scheduled_date <= last) {
           const params = new URLSearchParams(search)

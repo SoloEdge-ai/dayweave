@@ -124,6 +124,8 @@ export function TaskDraftCard({
   const hasInvalidTime = Object.keys(invalidTimes).length > 0
   const endpoint = '/ai/confirmations/' + event.id
   function show(record: DraftEvent) {
+    if (record.version < server.current.version ||
+        (server.current.status !== 'pending' && record.status === 'pending')) return
     server.current = record
     setDraft({ ...record, drafts: applyEdits(record.drafts, dirty.current) })
   }
@@ -145,6 +147,10 @@ export function TaskDraftCard({
         show(saved)
         cache(event.id, dirty.current, saved.version)
       } catch (e) {
+        if (server.current.status !== 'pending') {
+          sent.current = {}
+          return
+        }
         dirty.current = mergeEdits(changes, dirty.current)
         sent.current = {}
         cache(event.id, dirty.current, server.current.version)
@@ -257,6 +263,20 @@ export function TaskDraftCard({
       if (hasChanges(dirty.current)) void flush().catch(() => {})
     }
   }, [event.id])
+  useEffect(() => {
+    if (event.status !== 'pending' && server.current.status === 'pending' &&
+        event.version >= server.current.version) {
+      clearTimeout(timer.current)
+      dirty.current = {}
+      cache(event.id, {}, event.version)
+      show(event)
+      setError('')
+      setState('saved')
+      return
+    }
+    if (event.version > server.current.version && !pending.current &&
+        !hasChanges(dirty.current) && !hasInvalidTime) show(event)
+  }, [event, hasInvalidTime, state])
   async function retry() {
     setError('')
     setBusy(true)

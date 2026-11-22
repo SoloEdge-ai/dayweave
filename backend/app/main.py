@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.concurrency import run_in_threadpool
 
 from . import api, auth, services
 from .ai.router import router as ai_router
@@ -41,6 +42,11 @@ def error_locale(request):
     return request_locale(request)
 
 
+def upload_authorized(request):
+    with SessionLocal() as db:
+        return auth.current_session(request, db) is not None
+
+
 class RequestGuard:
     def __init__(self, app):
         self.app = app
@@ -68,6 +74,9 @@ class RequestGuard:
         content_length = headers.get("content-length", "0")
         if not content_length.isdigit() or int(content_length) > limit:
             return await reject(413, "request.too_large")(scope, receive, send)
+        if scope["method"] == "POST" and scope["path"] in large_uploads:
+            if not await run_in_threadpool(upload_authorized, Request(scope)):
+                return await reject(401, "auth.required")(scope, receive, send)
         total = 0
 
         async def limited_receive():

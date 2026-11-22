@@ -100,6 +100,19 @@ def test_http_access_export_and_rollback(http):
     assert client.get("/api/export").status_code == 401
 
 
+@pytest.mark.parametrize("path", ["/api/ai/transcribe", "/api/resources/upload"])
+def test_authenticated_upload_rejects_before_receiving_body(http, path):
+    client, _ = http
+
+    def body():
+        pytest.fail("Request body was read from an unauthenticated upload")
+        yield b""
+
+    response = client.post(path, content=body(), headers={"Content-Type": "multipart/form-data; boundary=test"})
+    assert response.status_code == 401
+    assert response.json()["code"] == "auth.required"
+
+
 def test_multipart_upload_and_link(http):
     client, root = http
     login(client, root)

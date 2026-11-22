@@ -17,7 +17,7 @@ docker compose exec dayweave cat /data/admin-password.txt
 
 在服务器上打开 [DayWeave 本机入口](http://127.0.0.1:8787)，输入生成的管理员密码。如果希望自行设定密码，请在**首次启动前**将 `.env` 中的 `DAYWEAVE_ADMIN_PASSWORD` 设为至少八个字符，妥善保管该文件。已有数据库会保留原密码。
 
-保留 `DAYWEAVE_BIND=127.0.0.1`。开放手机或 iPad 访问前，先验证公司 tailnet 无法通过 IPv4、IPv6、子网路由、Docker 转发，以及 Tailscale Serve 或 Funnel 等代理访问这个个人服务。只要仍有路径未经验证，就继续仅监听回环地址。部署过程无需改动公司的 Tailscale 配置。[网络隔离与验收](docs/V1_DESIGN.zh-CN.md#6-个人局域网与公司-tailscale-的边界)
+Compose 将应用后端发布到回环地址，升级旧配置时也适用。开放手机或 iPad 访问前，先验证公司 tailnet 无法通过 IPv4、IPv6、子网路由、Docker 转发，以及 Tailscale Serve 或 Funnel 等代理访问这个个人服务。只要仍有路径未经验证，就继续仅监听回环地址。部署过程无需改动公司的 Tailscale 配置。[网络隔离与验收](docs/V1_DESIGN.zh-CN.md#6-个人局域网与公司-tailscale-的边界)
 
 [宿主机 Caddy 配置](scripts/Caddyfile.lan) 仅监听指定的 IPv4 地址，允许明确列出的客户端访问，并转发到回环地址上的后端。将 `DAYWEAVE_LAN_IP` 设为个人网卡的地址，将 `DAYWEAVE_LAN_CLIENTS` 设为允许的 IP 或网段，以空格分隔。后端设置 `DAYWEAVE_COOKIE_SECURE=1`。经 Docker 转发时，从 `docker network inspect` 取得应用专用网桥的网关地址，填入 `DAYWEAVE_PROXY_IP`，让后端正确识别原始 HTTPS 协议。启动代理前，用主机防火墙将 HTTPS 端口限制在指定网卡和客户端，并限制转发到 Docker 应用网桥的流量。隔离验收后，获准设备信任代理的本地根证书，即可打开 `https://<局域网IP>:8443`。[Caddy 地址绑定](https://caddyserver.com/docs/caddyfile/directives/bind) · [Caddy 本地 TLS](https://caddyserver.com/docs/caddyfile/directives/tls)
 
@@ -53,7 +53,7 @@ sh scripts/backup.sh
 
 ```sh
 export COMPOSE_PROJECT_NAME=dayweave-recovery
-export DAYWEAVE_BIND=127.0.0.1 DAYWEAVE_PORT=18788
+export DAYWEAVE_PORT=18788 DAYWEAVE_COOKIE_SECURE=0
 docker compose build
 docker compose run --rm --no-deps -T dayweave sh -c 'test -z "$(ls -A /data)" && tar -xzf - -C /data' < backups/YOUR-ARCHIVE.tar.gz
 docker compose up -d
@@ -89,7 +89,7 @@ npm run preview
 
 若无法直接使用已激活的环境，可将 `DAYWEAVE_TEST_PYTHON` 设为 Python 解释器的绝对路径。预览命令会把桌面、手机以及 iPad 横竖屏截图写入 `docs/previews/`。前端资源均由本地服务提供。
 
-浏览器测试在 iPad 横屏和竖屏验证音频文件流程。将 `DAYWEAVE_TEST_VOICE_WAV` 设为一段中文 WAV 音频的绝对路径，可让该测试使用本地 Whisper 模型。设置 `DAYWEAVE_VOICE_SCREENSHOTS=1` 可导出本次测试的草稿和编排页截图。
+浏览器测试在 iPad 横屏和竖屏验证音频文件流程。将 `DAYWEAVE_TEST_VOICE_WAV` 设为“请为机器人跟踪创建一个任务”的 WAV 录音绝对路径，可让该测试使用本地 Whisper 模型。设置 `DAYWEAVE_VOICE_SCREENSHOTS=1` 可导出本次测试的草稿和编排页截图。
 
 在同一个浏览器测试目录运行 `npm run demo`，可打开带示例项目、任务和阅读进度的交互式浏览器。关闭窗口即可结束临时会话。
 

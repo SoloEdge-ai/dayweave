@@ -5,7 +5,7 @@
 .planner-toolbar nav {background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px}
 .planner-toolbar nav button {border-radius:7px;padding:0 13px}
 .planner-toolbar nav button[aria-pressed=true],.planner-queue button[aria-pressed=true] {background:var(--green);color:var(--sheet)}
-.planner-backlog-toggle {display:none}
+.planner-toolbar > .planner-backlog-toggle {display:none}
 .planner-columns {display:grid;grid-template-columns:minmax(185px,250px) minmax(0,1fr);gap:16px;align-items:start}
 .planner-backlog,.planner-panel,.planner-place {border:1px solid var(--line);border-radius:12px;background:var(--sheet);overflow:hidden}
 .planner-backlog header,.planner-panel header {display:flex;align-items:center;gap:8px;padding:13px 16px;border-bottom:1px solid var(--line)}
@@ -46,7 +46,7 @@
 .planner-agenda-row .icon-btn {min-width:44px}
 @media(max-width:970px) {
   .planner-columns {grid-template-columns:minmax(0,1fr)}
-  .planner-backlog-toggle {display:inline-flex}
+  .planner-toolbar > .planner-backlog-toggle {display:inline-flex}
   .planner-backlog:not(.expanded) {display:none}
   .planner-queue {max-height:30dvh;overflow:auto}
 }

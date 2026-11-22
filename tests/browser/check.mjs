@@ -42,12 +42,13 @@ async function checkVoicePlanner(page, date, tomorrow, width, height) {
   ])
   assert.ok(transcribed.ok(), await transcribed.text())
   const recognized = (await transcribed.json()).text
-  assert.ok(recognized.trim())
+  assert.match(recognized, /机器人.*(?:跟踪|追踪).*任务/)
   const composer = page.getByRole('textbox', { name: '给织日助手发消息' })
   await page.waitForFunction(expected => document.querySelector('.composer textarea')?.value === expected, recognized)
   assert.deepEqual(await tasks(), [])
-  await sendChat(page, recognized + ' ROS2 tracing iPad voice')
+  await sendChat(page, recognized)
   const card = page.getByRole('region', { name: '任务草稿' }).last()
+  assert.equal(await card.getByLabel('任务标题', { exact: true }).inputValue(), '机器人跟踪')
   await card.getByLabel('任务标题', { exact: true }).fill(title)
   await card.getByLabel('计划日期', { exact: true }).fill(tomorrow)
   await card.getByLabel('截止日期', { exact: true }).fill(tomorrow)
@@ -80,6 +81,21 @@ async function checkVoicePlanner(page, date, tomorrow, width, height) {
   if (process.env.DAYWEAVE_VOICE_SCREENSHOTS === '1') {
     await page.screenshot({ path: fileURLToPath(new URL('../../docs/previews/voice-planner-' + width + '.png', import.meta.url)), scale: 'css' })
   }
+  if (width === 820) {
+    await page.getByRole('button', { name: '编辑安排 · ' + title }).tap()
+    await editor.getByLabel('计划开始', { exact: true }).fill('23:00')
+    await editor.getByLabel('计划结束', { exact: true }).fill('01:00')
+    await editor.getByLabel('结束日期', { exact: true }).fill(tomorrow)
+    await editor.getByRole('button', { name: '保存安排', exact: true }).tap()
+    await editor.waitFor({ state: 'hidden' })
+    await page.getByRole('button', { name: '编辑安排 · ' + title }).tap()
+    const yesterday = new Date(Date.parse(date + 'T12:00Z') - 86400000).toISOString().slice(0, 10)
+    await editor.getByLabel('计划日期', { exact: true }).fill(yesterday)
+    await editor.getByRole('button', { name: '保存安排', exact: true }).tap()
+    await editor.waitFor({ state: 'hidden' })
+    const [overnight] = await tasks()
+    assert.equal(Date.parse(overnight.planned_end_at) - Date.parse(overnight.planned_start_at), 7200000)
+  }
   await page.getByRole('button', { name: '编辑安排 · ' + title }).tap()
   await editor.getByLabel('计划精度').selectOption('inbox')
   await editor.getByRole('button', { name: '保存安排', exact: true }).tap()
@@ -90,8 +106,15 @@ async function checkVoicePlanner(page, date, tomorrow, width, height) {
   if (await backlogToggle.isVisible()) await backlogToggle.tap()
   await page.getByRole('complementary', { name: '待安排' }).getByRole('button', { name: new RegExp(title) }).tap()
   await page.getByRole('button', { name: '排入待定日期', exact: true }).tap()
+  await editor.getByRole('button', { name: '保存安排', exact: true }).tap()
+  await editor.waitFor({ state: 'hidden' })
   await page.locator('.planner-floating').getByText(title, { exact: true }).waitFor()
   assert.equal((await tasks())[0].window_start, date.slice(0, 7) + '-01')
+  await page.getByRole('button', { name: '编辑安排 · ' + title }).tap()
+  assert.equal(await editor.getByLabel('计划精度').inputValue(), 'window')
+  await editor.getByRole('button', { name: '保存安排', exact: true }).tap()
+  await editor.waitFor({ state: 'hidden' })
+  assert.equal((await tasks())[0].scheduled_date, null)
   await page.getByRole('button', { name: '撤销安排', exact: true }).tap()
   await page.locator('.planner-floating').getByText(title, { exact: true }).waitFor({state: 'hidden'})
   const [restored] = await tasks()
@@ -107,6 +130,7 @@ async function checkVoicePlanner(page, date, tomorrow, width, height) {
 }
 const copies = {
   en: {
+    planner: 'Planner', planningScope: 'Planning scope', next: 'Next week', voice: 'Voice input',
     dashboard: 'Today’s overview', newTask: 'New task', title: 'Task title', date: 'Scheduled date',
     minutes: 'Estimate (minutes)', due: 'Due date', composer: 'Message DayWeave', send: 'Send',
     stop: 'Stop generating', reply: 'The test connection is working.', prompt: 'Create a ROS2 tracing task.',
@@ -114,6 +138,7 @@ const copies = {
     card: 'Task draft', draftTitle: 'Task title', confirm: 'Confirm creation', cancel: 'Cancel draft',
   },
   ja: {
+    planner: 'プランナー', planningScope: '予定の範囲', next: '来週', voice: '音声入力',
     dashboard: '今日の概要', newTask: '新規タスク', title: 'タスク名', date: '予定日',
     minutes: '所要時間（分）', due: '期限日', composer: 'アシスタントにメッセージ', send: '送信',
     stop: '生成を停止', reply: 'テスト接続に成功しました。', prompt: 'ROS2 tracing の学習タスクを作成して。',
@@ -169,6 +194,13 @@ async function checkWorkspaceLocales(page, api) {
     await page.reload()
     await page.getByRole('heading', { name: labels.dashboard, exact: true }).waitFor()
     assert.equal(await page.locator('html').getAttribute('lang'), language)
+    await page.goto('/planner')
+    await page.getByRole('heading', { name: labels.planner, exact: true }).waitFor()
+    await page.getByRole('navigation', { name: labels.planningScope }).getByRole('button', { name: labels.next, exact: true }).click()
+    await page.locator('.planner-weekday').last().waitFor()
+    await page.goto('/chat')
+    await page.getByRole('button', { name: labels.voice, exact: true }).click()
+    await page.getByRole('region', { name: labels.voice, exact: true }).waitFor()
     await page.goto('/tasks/all')
     await page.getByRole('button', { name: labels.newTask, exact: true }).first().click()
     const editor = page.getByRole('dialog', { name: labels.newTask })

@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "${DAYWEAVE_BIND:-127.0.0.1}:${DAYWEAVE_PORT:-8787}:8000"
+      - "127.0.0.1:${DAYWEAVE_PORT:-8787}:8000"
     environment:
       DAYWEAVE_DATA_DIR: /data
       DAYWEAVE_ADMIN_PASSWORD: ${DAYWEAVE_ADMIN_PASSWORD:-}

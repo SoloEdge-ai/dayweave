@@ -1,11 +1,15 @@
 """Transcribe bounded audio locally; only the editable text is returned to the browser."""
+import asyncio
+from contextlib import suppress
 from functools import lru_cache
 from io import BytesIO
 import os
 from pathlib import Path
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, Event
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
 
 from app.auth import require_admin
 from app.i18n import DomainError, request_locale
@@ -78,27 +82,59 @@ def model():
                         cpu_threads=min(os.cpu_count() or 2, 6))
 
 
+def recognize(blob, choice, cancelled):
+    waveform = decode(blob)
+    if cancelled.is_set():
+        return None
+    language_code = None if choice == "auto" else choice.split("-")[0]
+    segments, info = model().transcribe(waveform, language=language_code, beam_size=3, vad_filter=True,
+                                        condition_on_previous_text=False)
+    parts = []
+    try:
+        if cancelled.is_set():
+            return None
+        for segment in segments:
+            if cancelled.is_set():
+                return None
+            parts.append(segment.text)
+    finally:
+        close = getattr(segments, "close", None)
+        if close:
+            close()
+    text = "".join(parts).strip()
+    if not text:
+        raise DomainError(422, "voice.empty")
+    return {"text": text, "language": info.language}
+
+
+async def watch_disconnect(request, cancelled):
+    while (await request.receive())["type"] != "http.disconnect":
+        pass
+    cancelled.set()
+
+
 @router.post("/transcribe")
-def transcribe(request: Request, file: UploadFile = File(...), language: str | None = Form(None)):
+async def transcribe(request: Request, file: UploadFile = File(...), language: str | None = Form(None)):
     choice = (language or request_locale(request)).lower()
     if choice not in {"auto", "zh", "zh-cn", "ja", "en"}:
         raise DomainError(422, "settings.invalid_language")
     if not slot.acquire(blocking=False):
         raise DomainError(429, "voice.busy")
+    cancelled = Event()
+    watcher = None
     try:
-        blob = file.file.read(MAX_AUDIO + 1)
+        blob = await file.read(MAX_AUDIO + 1)
         if len(blob) > MAX_AUDIO:
             raise DomainError(413, "voice.size")
-        waveform = decode(blob)
-        language_code = None if choice == "auto" else choice.split("-")[0]
-        segments, info = model().transcribe(waveform, language=language_code, beam_size=3, vad_filter=True,
-                                            condition_on_previous_text=False)
-        text = "".join(segment.text for segment in segments).strip()
-        if not text:
-            raise DomainError(422, "voice.empty")
-        return {"text": text, "language": info.language}
+        watcher = asyncio.create_task(watch_disconnect(request, cancelled))
+        result = await run_in_threadpool(recognize, blob, choice, cancelled)
+        return result if result is not None else Response(status_code=499)
     except (ImportError, RuntimeError, OSError):
         raise DomainError(503, "voice.unavailable") from None
     finally:
-        file.file.close()
         slot.release()
+        if watcher:
+            watcher.cancel()
+            with suppress(asyncio.CancelledError):
+                await watcher
+        await file.close()

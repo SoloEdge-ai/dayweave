@@ -5,6 +5,7 @@ import { ErrorBox, IconButton } from './ui'
 
 const maxBytes = 20 * 1024 * 1024
 const maxSeconds = 120
+const stopAtSeconds = maxSeconds - 1
 const audioFormats = 'audio/*,.wav,.mp3,.m4a,.mp4,.aac,.adts,.webm,.ogg,.opus,.flac'
 function extension(mime:string) {
   if(mime.includes('mp4'))return 'm4a'
@@ -66,7 +67,7 @@ export function VoiceInput({insert,close}:{insert:(value:string)=>void;close:()=
       setElapsed(0);setFile(null);capture.start(1000);setPhase('recording')
       timer.current=setInterval(()=>{
         const seconds=Math.floor((Date.now()-started)/1000);setElapsed(seconds)
-        if(seconds>=maxSeconds&&capture.state==='recording')capture.stop()
+        if(seconds>=stopAtSeconds&&capture.state==='recording')capture.stop()
       },300)
     }catch(e){
       stopTracks()
@@ -77,7 +78,7 @@ export function VoiceInput({insert,close}:{insert:(value:string)=>void;close:()=
   async function transcribe(){
     if(locked||!file)return
     const length=mountedAudio.current?.duration
-    if(length&&Number.isFinite(length)&&length>maxSeconds+.75){setError('音频超过两分钟，请剪短后再试。');return}
+    if(length&&Number.isFinite(length)&&length>maxSeconds){setError('音频超过两分钟，请剪短后再试。');return}
     setPhase('transcribing');setError('')
     const abort=new AbortController();controller.current=abort
     try{

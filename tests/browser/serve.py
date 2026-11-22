@@ -54,13 +54,14 @@ def run(directory):
                        "ja": "テスト接続に成功しました。"}
             choice = {"index": 0, "delta": {"content": replies[language]}, "finish_reason": "stop"}
             latest_user = next(m["content"] for m in reversed(body["messages"]) if m["role"] == "user")
-            if body.get("tools") and "ROS2 tracing" in latest_user:
-                if "标记完成" in latest_user:
+            voice_task = "机器人" in latest_user and "任务" in latest_user
+            if body.get("tools") and (voice_task or "ROS2 tracing" in latest_user):
+                if voice_task:
+                    name = "create_task"
+                    arguments = {"title": "机器人跟踪", "estimated_minutes": 30}
+                elif "标记完成" in latest_user:
                     name = "complete_task"
                     arguments = {"query": latest_user.removeprefix("把").removesuffix("标记完成").strip()}
-                elif "iPad voice" in latest_user:
-                    name = "create_task"
-                    arguments = {"title": "ROS2 tracing iPad voice", "estimated_minutes": 30}
                 else:
                     name = "create_task"
                     titles = {"en": "ROS2 tracing exercise", "ja": "ROS2 tracing の演習", "zh": "ROS2 tracing 学习笔记"}

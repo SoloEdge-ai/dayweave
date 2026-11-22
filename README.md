@@ -17,7 +17,7 @@ docker compose exec dayweave cat /data/admin-password.txt
 
 On the server, open [DayWeave on localhost](http://127.0.0.1:8787). Enter the generated administrator password. To select your own initial password, set `DAYWEAVE_ADMIN_PASSWORD` to at least eight characters **before the first launch** and keep the environment file private. Existing databases keep their password on restart.
 
-Keep `DAYWEAVE_BIND=127.0.0.1`. For phone or iPad access, first verify that the company tailnet cannot reach the personal service over IPv4 or IPv6, through subnet routes, Docker forwarding or a proxy such as Tailscale Serve or Funnel. Keep the deployment loopback-only while any path remains unverified. This setup requires no changes to company Tailscale configuration. [Network isolation and acceptance](docs/V1_DESIGN.md#6-personal-lan-access-and-company-tailnet-exclusion)
+Compose publishes the backend on loopback, including upgrades from earlier configurations. For phone or iPad access, first verify that the company tailnet cannot reach the personal service over IPv4 or IPv6, through subnet routes, Docker forwarding or a proxy such as Tailscale Serve or Funnel. Keep the deployment loopback-only while any path remains unverified. This setup requires no changes to company Tailscale configuration. [Network isolation and acceptance](docs/V1_DESIGN.md#6-personal-lan-access-and-company-tailnet-exclusion)
 
 The [host Caddy configuration](scripts/Caddyfile.lan) listens on a single IPv4 address, permits explicit client addresses and forwards to the loopback backend. Set `DAYWEAVE_LAN_IP` to the address of the personal interface and `DAYWEAVE_LAN_CLIENTS` to the approved IP addresses or CIDRs separated by spaces. Set `DAYWEAVE_COOKIE_SECURE=1` on the backend. With Docker forwarding, set `DAYWEAVE_PROXY_IP` to the exact gateway of the dedicated application bridge from `docker network inspect`, so the backend recognizes the original HTTPS scheme on authenticated requests. Before starting the proxy, restrict its TCP port to that interface and those clients in the host firewall and restrict forwarding to the Docker application bridge. Verify the isolated ingress before use. Open `https://<LAN-IP>:8443` on an approved device after trusting the proxy's local root certificate. [Caddy bind](https://caddyserver.com/docs/caddyfile/directives/bind) · [Caddy local TLS](https://caddyserver.com/docs/caddyfile/directives/tls)
 
@@ -53,7 +53,7 @@ To test recovery with a **fresh** Compose project and volume, choose an unused p
 
 ```sh
 export COMPOSE_PROJECT_NAME=dayweave-recovery
-export DAYWEAVE_BIND=127.0.0.1 DAYWEAVE_PORT=18788
+export DAYWEAVE_PORT=18788 DAYWEAVE_COOKIE_SECURE=0
 docker compose build
 docker compose run --rm --no-deps -T dayweave sh -c 'test -z "$(ls -A /data)" && tar -xzf - -C /data' < backups/YOUR-ARCHIVE.tar.gz
 docker compose up -d
@@ -89,7 +89,7 @@ npm run preview
 
 Set `DAYWEAVE_TEST_PYTHON` to an absolute interpreter path if the activated environment is unavailable. The preview command writes desktop, phone and portrait/landscape iPad screenshots to `docs/previews/`. Frontend assets are served locally.
 
-The browser checks exercise the audio-file workflow in both iPad orientations. Set `DAYWEAVE_TEST_VOICE_WAV` to an absolute path to a short Chinese WAV file to use the installed Whisper model instead of the speech fixture. Set `DAYWEAVE_VOICE_SCREENSHOTS=1` to save the draft and planner screenshots from that run.
+The browser checks exercise the audio-file workflow in both iPad orientations. Set `DAYWEAVE_TEST_VOICE_WAV` to an absolute path to a WAV recording of “请为机器人跟踪创建一个任务” to use the installed Whisper model instead of the speech fixture. Set `DAYWEAVE_VOICE_SCREENSHOTS=1` to save the draft and planner screenshots from that run.
 
 Run `npm run demo` from the same browser-test directory to open an interactive browser with the sample projects, tasks and reading progress used for the previews. Closing its window ends the disposable session.
 
