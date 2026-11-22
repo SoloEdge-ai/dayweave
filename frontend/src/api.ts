@@ -38,6 +38,7 @@ export type Task = {
   planned_start_at: string | null
   planned_end_at: string | null
   due_date: string | null
+  due_period?: 'morning' | 'afternoon' | 'evening' | null
   due_at: string | null
   completed_at: string | null
   pinned: boolean

@@ -200,6 +200,9 @@ class CodexAdapter:
                 event = msg.get("params", {})
                 if event.get("turnId", turn) != turn:
                     continue
+                if msg.get("method") == "thread/tokenUsage/updated" and event.get("threadId") == thread["thread"]["id"] and event.get("turnId") == turn:
+                    # Each stream starts an ephemeral thread. Its latest cumulative snapshot covers this call.
+                    result.report_usage(event["tokenUsage"].get("total"), "inputTokens", "outputTokens", "totalTokens")
                 if msg.get("method") == "item/completed" and event["item"]["type"] == "agentMessage":
                     text = event["item"]["text"]
                 if msg.get("method") == "turn/completed" and event["turn"]["id"] == turn:

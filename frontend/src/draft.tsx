@@ -9,7 +9,8 @@ import {
   LoaderCircle,
   PencilLine,
 } from 'lucide-react'
-import { api, dateInZone, dateLabel, errorText, periodLabels, priorityLabels, type Task } from './api'
+import { PlanDatePicker } from './plan-date'
+import { api, dateLabel, errorText, periodLabels, priorityLabels, type Task } from './api'
 import { ErrorBox, Field, useWorkspace } from './ui'
 import { localInput, toIso } from './datetime'
 
@@ -22,6 +23,7 @@ export type DraftFields = Pick<
   | 'planning_window'
   | 'window_start'
   | 'due_date'
+  | 'due_period'
   | 'due_at'
   | 'planned_start_at'
   | 'planned_end_at'
@@ -214,6 +216,7 @@ export function TaskDraftCard({
     if (field === 'due_at') {
       update(row.index, {
         due_at: instant,
+        due_period: null,
         due_date: instant
           ? null
           : localInput(t.due_at, zone).slice(0, 10) || t.due_date,
@@ -390,6 +393,8 @@ export function TaskDraftCard({
                   {localInput(t.planned_end_at, zone).replace('T', ' ')}
                 </small>
               )}
+              {t.project_id && <small>{projects.find(p => p.id === t.project_id)?.name}</small>}
+              {t.due_date && <small>{'截止日期'} · {dateLabel(t.due_date)} {periodLabels[t.due_period ?? '']}</small>}
               {t.due_at && (
                 <small>
                   {'精确截止时刻'} ·{' '}
@@ -437,50 +442,45 @@ export function TaskDraftCard({
                 onChange={(e) => change({ title: e.target.value })}
               />
             </Field>
-            {(t.planning_window || !t.scheduled_date) && <Field label="计划范围" wide>
-              <select value={t.planning_window ?? ''} onChange={e => {
-                const day = dateInZone(zone)
-                const anchor = new Date(day + 'T12:00:00Z')
-                anchor.setUTCDate(anchor.getUTCDate() - (anchor.getUTCDay() + 6) % 7)
-                const window = e.target.value
-                change({
-                  planning_window: window === 'month' ? 'month' : window ? 'week' : null,
-                  window_start: window === 'month' ? day.slice(0, 7) + '-01' : window ? anchor.toISOString().slice(0, 10) : null,
-                })
-              }}>
-                <option value="">未安排</option>
-                <option value="week">待定周</option>
-                <option value="month">待定月</option>
+            <Field label="所属项目">
+              <select
+                value={t.project_id ?? ''}
+                onChange={(e) =>
+                  change({
+                    project_id: e.target.value
+                      ? Number(e.target.value)
+                      : null,
+                  })
+                }
+              >
+                <option value="">无项目</option>
+                {projects.map((p) => (
+                  <option value={p.id} key={p.id}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
-            </Field>}
-            {t.planning_window && <Field label="计划周期起始日" wide><input
-              type="date" value={t.window_start ?? ''} onChange={e => {
-                if (!e.target.value) return
-                const date = new Date(e.target.value + 'T12:00:00Z')
-                date.setUTCDate(t.planning_window === 'month' ? 1 : date.getUTCDate() - (date.getUTCDay() + 6) % 7)
-                change({ window_start: date.toISOString().slice(0, 10) })
-              }} /></Field>}
-            <Field label="计划日期">
+            </Field>
+            <Field label="截止日期">
               <input
                 type="date"
-                value={t.scheduled_date ?? ''}
+                value={t.due_date ?? localInput(t.due_at, zone).slice(0, 10)}
                 onChange={(e) => {
-                  clearInvalid(row.index, [
-                    'planned_start_at',
-                    'planned_end_at',
-                  ])
-                  change({
-                    scheduled_date: e.target.value || null,
-                    planned_start_at: null,
-                    planned_end_at: null,
-                    planning_window: null,
-                    window_start: null,
-                    ...(!e.target.value ? { scheduled_period: null } : {}),
-                  })
+                  clearInvalid(row.index, ['due_at'])
+                  change({ due_date: e.target.value || null, due_at: null, ...(!e.target.value ? {due_period:null} : {}) })
                 }}
               />
             </Field>
-            <Field label="计划时段">
+            {t.due_date && <Field label="截止时段"><select value={t.due_period ?? ''} onChange={e =>
+              change({ due_period:e.target.value as DraftFields['due_period'] || null })}>
+              <option value="">不限时段</option><DraftOptions labels={periodLabels} />
+            </select></Field>}
+            <PlanDatePicker plan={t} zone={zone} change={plan => {
+              clearInvalid(row.index, ['planned_start_at', 'planned_end_at'])
+              change({ ...plan, planned_start_at:null, planned_end_at:null,
+                ...(!plan.scheduled_date ? {scheduled_period:null} : {}) })
+            }} />
+            {t.scheduled_date && <Field label="计划时段">
               <select
                 disabled={!t.scheduled_date}
                 value={t.scheduled_period ?? ''}
@@ -499,17 +499,7 @@ export function TaskDraftCard({
                 <option value="">不限时段</option>
                 <DraftOptions labels={periodLabels} />
               </select>
-            </Field>
-            <Field label="截止日期">
-              <input
-                type="date"
-                value={t.due_date ?? localInput(t.due_at, zone).slice(0, 10)}
-                onChange={(e) => {
-                  clearInvalid(row.index, ['due_at'])
-                  change({ due_date: e.target.value || null, due_at: null })
-                }}
-              />
-            </Field>
+            </Field>}
             <Field label="预计耗时（分钟）">
               <input
                 type="number"
@@ -558,25 +548,6 @@ export function TaskDraftCard({
                 </Field>
                 <Field label="精确截止时刻" wide>
                   {momentInput(row, 'due_at')}
-                </Field>
-                <Field label="所属项目">
-                  <select
-                    value={t.project_id ?? ''}
-                    onChange={(e) =>
-                      change({
-                        project_id: e.target.value
-                          ? Number(e.target.value)
-                          : null,
-                      })
-                    }
-                  >
-                    <option value="">无项目</option>
-                    {projects.map((p) => (
-                      <option value={p.id} key={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
                 </Field>
                 <Field label="分类">
                   <input

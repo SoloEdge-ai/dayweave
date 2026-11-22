@@ -1,3 +1,4 @@
+import { PlanDatePicker, type PlanDate } from './plan-date'
 import { useState, type FormEvent } from 'react'
 import { ExternalLink, Trash2 } from 'lucide-react'
 import {
@@ -69,6 +70,9 @@ function TaskEditor({
     scheduled_period: t.scheduled_period ?? '',
     planned_start_at: localInput(t.planned_start_at, zone),
     planned_end_at: localInput(t.planned_end_at, zone),
+    planning_window: t.planning_window ?? null,
+    window_start: t.window_start ?? null,
+    due_period: t.due_period ?? '',
     due_date: t.due_date ?? '',
     due_at: localInput(t.due_at, zone),
   })
@@ -77,11 +81,11 @@ function TaskEditor({
     [allow, setAllow] = useState(false)
   const { busy, error, submit } = useSubmit(close)
   const props = (key: keyof typeof values) => ({
-    value: values[key],
+    value: values[key] ?? '',
     onChange: (e: { target: { value: string } }) =>
       setValues({ ...values, [key]: e.target.value }),
   })
-  function shiftPlan(date: string) {
+  function shiftPlan(date: string, window: PlanDate['planning_window'] = null, anchor: string | null = null) {
     const previous =
       values.scheduled_date || values.planned_start_at.slice(0, 10)
     const shiftMoment = (local: string) => {
@@ -96,6 +100,8 @@ function TaskEditor({
     setValues({
       ...values,
       scheduled_date: date,
+      planning_window: window ?? null,
+      window_start: anchor,
       scheduled_period: date ? values.scheduled_period : '',
       planned_start_at: shiftMoment(values.planned_start_at),
       planned_end_at: shiftMoment(values.planned_end_at),
@@ -124,6 +130,7 @@ function TaskEditor({
               t.planned_start_at,
             ),
             planned_end_at: toIso(v.planned_end_at, zone, t.planned_end_at),
+            due_period: !v.due_at && v.due_date ? v.due_period || null : null,
             due_date: v.due_at ? null : v.due_date || null,
             due_at: toIso(v.due_at, zone, t.due_at),
             pinned,
@@ -161,19 +168,14 @@ function TaskEditor({
           <Field label="优先级">
             <select {...props('priority')}>{opts(priorityLabels)}</select>
           </Field>
-          <Field label="计划日期">
-            <input
-              type="date"
-              value={values.scheduled_date}
-              onChange={(e) => shiftPlan(e.target.value)}
-            />
-          </Field>
-          <Field label="计划时段">
+          <PlanDatePicker plan={values} zone={zone} change={plan =>
+            shiftPlan(plan.scheduled_date ?? '', plan.planning_window, plan.window_start ?? null)} />
+          {values.scheduled_date && <Field label="计划时段">
             <select {...props('scheduled_period')}>
               <option value="">不限时段</option>
               {opts(periodLabels)}
             </select>
-          </Field>
+          </Field>}
           <Field label="截止日期">
             <input
               type="date"
@@ -181,6 +183,9 @@ function TaskEditor({
               {...props('due_date')}
             />
           </Field>
+          {values.due_date && !values.due_at && <Field label="截止时段"><select {...props('due_period')}>
+            <option value="">不限时段</option>{opts(periodLabels)}
+          </select></Field>}
           <Field label="预计耗时（分钟）">
             <input type="number" min={1} {...props('estimated_minutes')} />
           </Field>

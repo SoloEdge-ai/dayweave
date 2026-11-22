@@ -71,8 +71,10 @@ def run(directory):
                 tool = {"index": 0, "id": "fixture-call", "type": "function",
                         "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}}
                 choice = {"index": 0, "delta": {"tool_calls": [tool]}, "finish_reason": "tool_calls"}
+            assert body["stream_options"]["include_usage"] is True
             frame = json.dumps({"choices": [choice]}, ensure_ascii=False)
-            return httpx.Response(200, text=f"data: {frame}\n\ndata: [DONE]\n\n",
+            meter = json.dumps({"choices": [], "usage": {"prompt_tokens": 32, "completion_tokens": 8, "total_tokens": 40}})
+            return httpx.Response(200, text=f"data: {frame}\n\ndata: {meter}\n\ndata: [DONE]\n\n",
                                   headers={"Content-Type": "text/event-stream"})
         return httpx.Response(404)
 

@@ -223,7 +223,7 @@ export function TaskRow({
           {due && (
             <span>
               <Flag size={12} />
-              {dateLabel(due)}{t.due_at ? ' '+timeLabel(t.due_at,zone) : ''}截止
+              {dateLabel(due)}{t.due_at ? ' '+timeLabel(t.due_at,zone) : t.due_period ? ' '+periodLabels[t.due_period] : ''}截止
             </span>
           )}
           {t.resource_ids?.length > 0 && (

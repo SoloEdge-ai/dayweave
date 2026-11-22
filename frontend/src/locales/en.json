@@ -469,5 +469,14 @@
   "模型同步失败": "Model refresh failed",
   "模型目录已更新": "Model list updated",
   "刷新模型": "Refresh models",
-  "点击「刷新模型」读取目录": "Choose Refresh models to load the list"
+  "点击「刷新模型」读取目录": "Choose Refresh models to load the list",
+  "指定日期": "Choose a date",
+  "具体日期待安排": "Day to be decided",
+  "截止时段": "Deadline time of day",
+  "本轮 Token 用量": "Token usage for this turn",
+  "Token 用量未记录": "Token usage unavailable",
+  "本轮用量": "Turn usage",
+  "已报告用量": "Reported usage (partial)",
+  "输入": "Input",
+  "输出": "Output"
 }

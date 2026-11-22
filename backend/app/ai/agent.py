@@ -16,7 +16,7 @@ from app import services
 from app.records import lock_for_write
 
 from . import drafts, workspace_tools
-from .adapters import ProviderError, Round
+from .adapters import ProviderError, TurnUsage
 from .locale import key, preference, translate
 from .models import ChatTurn, Conversation, Message, PendingAction
 from .providers import adapter_for, provider
@@ -33,6 +33,7 @@ Local date and time: {now.isoformat(timespec="minutes")} ({settings["timezone"]}
 Use only the selected workspace and the signed-in account's own settings and provider connections. You cannot switch workspaces or manage members.
 Query tools for real tasks, projects and resources. Creation tools only prepare an editable draft. Only the user's separate confirmation button creates a task.
 Keep the schedule and deadline separate. Tomorrow afternoon / 明天下午 / 明日の午後 sets a local date and afternoon period, never an invented hour.
+A deadline such as “DDL 为明天晚上” or “due tomorrow evening” sets due_date and due_period=evening. Leave execution fields empty unless the user also specifies when to work. Never invent a clock time.
 For this week, next week or this month without an execution day, use planning_window=week or month and window_start=the local Monday or first of month. Weeks run Monday through Sunday. Leave scheduled_date and all clock fields empty.
 By Friday / 周五前 / 金曜まで means a date-only deadline. Use an offset-aware time only when explicitly given. Unscheduled ideas belong in Inbox. Ask about unclear dates.
 Keep direct date expressions in the user's own words where possible. When a resource and viewing date are given, use save_and_schedule_resource for an atomic draft.
@@ -240,6 +241,7 @@ def prepare(db, calls, today, user_text):
                 "planned_end_at",
                 "due_date",
                 "due_at",
+                "due_period",
                 "planning_window",
                 "window_start",
             ):
@@ -401,8 +403,9 @@ def check_lease(db, turn):
     turn.lease_until = int(time.time()) + 180
 
 
-def finalize(db, turn, msg, state, content, events):
+def finalize(db, turn, msg, state, content, events, usage):
     check_lease(db, turn)
+    msg.token_usage = usage.snapshot()
     msg.content, msg.tools, turn.state = content, events, state
     db.commit()
 
@@ -412,6 +415,7 @@ def run(db, turn, req, lease):
     yield {"type": "conversation", "id": turn.conversation_id}
     msg = db.get(Message, turn.message_id)
     saved = []
+    usage = TurnUsage(msg.token_usage)
     settings = services.get_settings(db)
     lang = settings["language"]
     row = provider(db, msg.provider)
@@ -445,18 +449,19 @@ def run(db, turn, req, lease):
             req.content,
             re.IGNORECASE,
         ):
-            answer = Round()
+            answer = usage.start()
             for chunk in adapter.stream(
                 instructions, history, [], msg.model, reasoning, answer
             ):
                 yield {"type": "delta", "text": chunk}
-            finalize(db, turn, msg, "done", answer.text, saved)
+            finalize(db, turn, msg, "done", answer.text, saved, usage)
+            yield {"type": "usage", "usage": msg.token_usage}
             yield {"type": "done"}
             return
         for _ in range(5):
             check_lease(db, turn)
             db.commit()
-            round_ = Round()
+            round_ = usage.start()
             # Tool-selection output may contain a premature claim. Only expose it once resolved.
             for _chunk in adapter.stream(
                 instructions
@@ -468,6 +473,8 @@ def run(db, turn, req, lease):
                 round_,
             ):
                 pass
+            if round_.usage:
+                yield {"type": "usage", "usage": usage.snapshot()}
             if len(round_.calls) > 20:
                 raise ProviderError("模型返回的操作过多，请缩小范围。")
             if not round_.calls:
@@ -499,7 +506,7 @@ def run(db, turn, req, lease):
                     text = translate(text, lang)
                     yield {"type": "delta", "text": text}
                 else:
-                    answer = Round()
+                    answer = usage.start()
                     for chunk in adapter.stream(
                         instructions + " Explain only; no changes were made.",
                         history,
@@ -510,7 +517,7 @@ def run(db, turn, req, lease):
                     ):
                         yield {"type": "delta", "text": chunk}
                     text = answer.text
-                finalize(db, turn, msg, "done", text, saved)
+                finalize(db, turn, msg, "done", text, saved, usage)
                 break
             if any(c.name not in DEFINITIONS for c in round_.calls):
                 raise ProviderError("模型请求了不支持的工具。")
@@ -537,7 +544,7 @@ def run(db, turn, req, lease):
                     db, turn, writes, today, req.content, advisory or seen_external
                 )
                 saved.extend(events)
-                finalize(db, turn, msg, "done", text, saved)
+                finalize(db, turn, msg, "done", text, saved, usage)
                 yield from events
                 yield {"type": "delta", "text": text}
                 break
@@ -545,11 +552,11 @@ def run(db, turn, req, lease):
             # After factual reads, let the provider stream the final response without write tools.
             if any(c.name=="open_workspace_action" for c in round_.calls):
                 text=workspace_tools.ready_message(lang)
-                finalize(db,turn,msg,"done",text,saved)
+                finalize(db,turn,msg,"done",text,saved,usage)
                 yield {"type":"delta","text":text}
                 break
             if advisory or all(c.name == "generate_daily_plan" for c in round_.calls):
-                answer = Round()
+                answer = usage.start()
                 for chunk in adapter.stream(
                     instructions
                     + " This is a read-only request. Answer using the tool results.",
@@ -560,7 +567,7 @@ def run(db, turn, req, lease):
                     answer,
                 ):
                     yield {"type": "delta", "text": chunk}
-                finalize(db, turn, msg, "done", answer.text, saved)
+                finalize(db, turn, msg, "done", answer.text, saved, usage)
                 break
         else:
             raise ProviderError("工具调用已达到本轮上限，请缩小问题范围。")
@@ -589,7 +596,8 @@ def run(db, turn, req, lease):
 
             text = validation_info(exc, lang)["detail"]
         saved.append({"type": "error", "message": text})
-        finalize(db, turn, msg, "failed", text, saved)
+        finalize(db, turn, msg, "failed", text, saved, usage)
+        yield {"type": "usage", "usage": msg.token_usage}
         yield saved[-1]
     finally:
         if turn.state == "running" and turn.lease == lease:
@@ -600,8 +608,10 @@ def run(db, turn, req, lease):
                 msg,
                 "interrupted",
                 translate("请求中断，可检查历史后再试。", lang),
-                saved,
+                saved, usage,
             )
+    if turn.state == "done":
+        yield {"type": "usage", "usage": msg.token_usage}
     yield {"type": "done"}
 
 

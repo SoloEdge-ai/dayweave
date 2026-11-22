@@ -32,6 +32,7 @@ class EditableTask(Params):
     planned_start_at: str | None = None
     planned_end_at: str | None = None
     estimated_minutes: int | None = Field(None, gt=0, le=525600)
+    due_period: Literal["morning", "afternoon", "evening"] | None = None
     due_date: str | None = None
     due_at: str | None = None
 

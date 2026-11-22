@@ -91,7 +91,9 @@ sequenceDiagram
 | `GET /api/ai/chatgpt/guide`、`POST /api/ai/chatgpt/disconnect` | 取得官方配置说明或断开授权 |
 | `POST /api/ai/codex/login`, `GET /api/ai/codex/login`, `POST /api/ai/codex/disconnect` | 为当前账号发起或查询设备登录，或移除本地 Codex 授权。等待授权时会返回该账号专用的验证链接和设备码。 |
 
-聊天请求应包含 `content` 和唯一的 `request_id`。可选字段包括 `provider`、`model`、`reasoning` 与 `conversation_id`。只有重试同一请求时才复用请求 ID。每个 SSE 帧的 `data` 为带有 `type` 字段的 JSON 对象。常见类型包括 `conversation`、`delta`、`tool`、`task_draft`、`confirmation`、`error` 和 `done`。
+聊天请求应包含 `content` 和唯一的 `request_id`。可选字段包括 `provider`、`model`、`reasoning` 与 `conversation_id`。只有重试同一请求时才复用请求 ID。每个 SSE 帧的 `data` 为带有 `type` 字段的 JSON 对象。常见类型包括 `conversation`、`delta`、`tool`、`task_draft`、`confirmation`、`usage`、`error` 和 `done`。
+
+每个 `usage` 事件是当前轮次的累计快照，包含 `total_tokens`、`input_tokens`、`output_tokens` 和 `partial`。`partial` 为真时只汇总有服务商回报的调用。未提供的明细或用量为 null。最终快照保存在助手消息的 `token_usage` 中，重放时复用。任务的 `due_period` 可与 `due_date` 一起使用，取值为 `morning`、`afternoon` 或 `evening`。精确截止时刻使用 `due_at`。
 
 ### 可编辑的任务草稿
 

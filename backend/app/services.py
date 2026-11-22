@@ -80,7 +80,7 @@ def _write_task(db, row, data, source, conversation_id, *, include_change=False)
     if data.get("due_date") and "due_at" not in data:
         merged["due_at"] = None
     task = TaskInput.model_validate(merged)
-    temporal = {"scheduled_date", "planned_start_at", "planned_end_at", "due_date", "due_at", "planning_window", "window_start"}
+    temporal = {"scheduled_date", "planned_start_at", "planned_end_at", "due_date", "due_at", "scheduled_period", "due_period", "planning_window", "window_start"}
     changed_time = any((before or {}).get(k) != merged.get(k) for k in temporal)
     apply_time_rules(task, get_settings(db)["timezone"], check_due=changed_time)
     if task.project_id:

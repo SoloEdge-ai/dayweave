@@ -42,6 +42,7 @@ class TaskInput(ScheduleFields):
     project_id: int | None = Field(None, gt=0)
     estimated_minutes: int | None = Field(None, gt=0, le=525600)
     due_date: date | None = None
+    due_period: Literal["morning", "afternoon", "evening"] | None = None
     due_at: AwareDatetime | None = None
     pinned: bool = False
     resource_ids: IdList = Field(default_factory=list)
@@ -61,6 +62,8 @@ class TaskInput(ScheduleFields):
             if ((self.planning_window == "week" and self.window_start.weekday() != 0)
                     or (self.planning_window == "month" and self.window_start.day != 1)):
                 raise ValueError("time.window_anchor")
+        if self.due_period and not self.due_date:
+            raise ValueError("time.due_period_without_date")
         if self.due_date and self.due_at:
             raise ValueError("time.deadline_precision")
         if self.planned_end_at and (not self.planned_start_at or self.planned_end_at <= self.planned_start_at):

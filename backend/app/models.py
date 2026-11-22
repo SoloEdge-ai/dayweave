@@ -72,6 +72,7 @@ class Task(Record, Base):
     planned_start_at: Mapped[str | None] = mapped_column(String)
     planned_end_at: Mapped[str | None] = mapped_column(String)
     due_date = mapped_column(Date, nullable=True, index=True)
+    due_period: Mapped[str | None] = mapped_column(String)
     due_at: Mapped[str | None] = mapped_column(String, index=True)
     completed_at: Mapped[str | None] = mapped_column(String)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)

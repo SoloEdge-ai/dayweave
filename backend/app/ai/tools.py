@@ -31,6 +31,7 @@ class TaskFields(Params):
     planned_start_at: str | None = None
     planned_end_at: str | None = None
     due_date: str | None = None
+    due_period: Literal["morning", "afternoon", "evening"] | None = None
     due_at: str | None = None
     resource_ids: list[int] | None = Field(None, max_length=20)
     status: Literal["todo", "in_progress", "done", "cancelled"] | None = None
@@ -111,6 +112,7 @@ class Watch(Resource):
     window_start: str | None = None
     scheduled_period: Literal["morning", "afternoon", "evening"] | None = None
     due_date: str | None = None
+    due_period: Literal["morning", "afternoon", "evening"] | None = None
     due_at: str | None = None
     estimated_minutes: int | None = Field(None, gt=0, le=525600)
     priority: Literal["low", "medium", "high"] | None = None
@@ -126,7 +128,7 @@ class Plan(ByDate):
 DEFINITIONS = {
     "create_task": (
         Create,
-        "Draft one task for a separate human confirmation. Omit unknown dates. Preserve date-only precision and use scheduled_period for imprecise times.",
+        "Draft one task for a separate human confirmation. Omit unknown dates. Preserve deadline day parts in due_period and execution day parts in scheduled_period.",
     ),
     "get_task": (Target, "Resolve a user's task by name or #ID."),
     "search_tasks": (
@@ -330,6 +332,7 @@ def brief(row):
         "planned_end_at",
         "due_date",
         "due_at",
+        "due_period",
         "estimated_minutes",
         "resource_ids",
         "type",

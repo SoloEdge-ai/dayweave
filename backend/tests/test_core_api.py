@@ -355,6 +355,9 @@ def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http
 
         def events(self, deadline):
             text = json.dumps({"calls": [{"name": "create_task", "arguments": json.dumps({"title": "Draft from Codex"})}]})
+            for value in (6, 10):
+                yield {"method": "thread/tokenUsage/updated", "params": {"turnId": "turn", "threadId": "t",
+                       "tokenUsage": {"total": {"inputTokens": value, "outputTokens": 2, "totalTokens": value + 2}}}}
             yield {"method": "item/completed", "params": {"turnId": "turn", "item": {"type": "agentMessage", "text": text}}}
             yield {"method": "turn/completed", "params": {"turn": {"id": "turn", "status": "completed"}}}
 
@@ -401,6 +404,8 @@ def test_codex_login_is_private_and_chat_creates_tasks_only_on_confirmation(http
         assert not next(p for p in peer.get("/api/ai/providers", headers=scope).json() if p["id"] == "codex")["has_key"]
         response = client.post("/api/ai/chat", headers=scope, json={"provider": "codex", "request_id": "codex-test-request", "content": "Create a task"})
         frames = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: {")]
+        usage = [frame["usage"] for frame in frames if frame["type"] == "usage"][-1]
+        assert usage == {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12, "partial": False}
         draft = next(frame for frame in frames if frame["type"] == "task_draft")
         url = f"/api/ai/confirmations/{draft['id']}"
         assert peer.get(url, headers=scope).status_code == 404

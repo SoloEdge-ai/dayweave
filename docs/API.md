@@ -91,7 +91,9 @@ Send the example to `POST /api/tasks`. To complete its returned ID, send `{"stat
 | `GET /api/ai/chatgpt/guide`, `POST /api/ai/chatgpt/disconnect` | Retrieve official setup guidance or disconnect the registration |
 | `POST /api/ai/codex/login`, `GET /api/ai/codex/login`, `POST /api/ai/codex/disconnect` | Start or poll device login for the current account, or remove its local Codex grant. Pending responses include a private verification URL and user code. |
 
-A chat request includes `content` and a unique `request_id`. Optional fields include `provider`, `model`, `reasoning` and `conversation_id`. Reuse a request ID only for the same request. Each SSE frame has a JSON `data` object with a `type` field. Common types are `conversation`, `delta`, `tool`, `task_draft`, `confirmation`, `error` and `done`.
+A chat request includes `content` and a unique `request_id`. Optional fields include `provider`, `model`, `reasoning` and `conversation_id`. Reuse a request ID only for the same request. Each SSE frame has a JSON `data` object with a `type` field. Common types are `conversation`, `delta`, `tool`, `task_draft`, `confirmation`, `usage`, `error` and `done`.
+
+Each `usage` event is a cumulative snapshot for this user turn. Read `usage.total_tokens`, `input_tokens`, `output_tokens` and `partial`. A partial total covers only calls with a provider report. Missing breakdowns or unavailable usage are null. The final snapshot is stored as `token_usage` on the assistant message and reused on replay. The task field `due_period` accepts `morning`, `afternoon` or `evening` alongside `due_date`. Exact deadlines use `due_at`.
 
 ### Editable task drafts
 

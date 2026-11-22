@@ -94,6 +94,9 @@ try {
         await page.getByRole('button', { name: '编辑“学习 ROS2 tracing”' }).tap()
         await page.getByRole('dialog', { name: '编辑任务' }).waitFor()
         await page.screenshot({ path: path.join(out, 'ipad-edit.png'), animations: 'disabled' })
+        await page.getByRole('dialog').getByLabel('计划范围', { exact:true }).selectOption('week')
+        await page.getByText('具体日期待安排', { exact:true }).waitFor()
+        await page.screenshot({ path: path.join(out, 'ipad-week-plan.png'), animations: 'disabled' })
       }
       if (name === 'ipad-landscape') {
         await page.getByRole('button', { name: '打开织日助手' }).tap()

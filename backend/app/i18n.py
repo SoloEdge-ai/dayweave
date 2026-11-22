@@ -75,6 +75,7 @@ MESSAGES = {
     "time.due_conflict": ("计划时间晚于截止要求。请调整截止时间，或确认保留冲突。", "The plan extends past the deadline. Adjust the deadline or confirm the conflict.", "予定が期限を超えています。期限を調整するか、そのまま保存することを確認してください。"),
     "time.deadline_precision": ("截止日期和精确截止时刻只能选择一种", "Choose either a deadline date or an exact deadline time.", "期限は日付または正確な時刻のどちらかを選んでください。"),
     "time.end_before_start": ("计划结束时间必须晚于计划开始时间", "The end time must be after the start time.", "終了時刻は開始時刻より後にしてください。"),
+    "time.due_period_without_date": ("请先选择截止日期，再选择截止时段", "Choose a deadline date before selecting its time of day.", "期限の時間帯を選ぶ前に期限日を指定してください。"),
     "time.period_without_date": ("请先选择计划日期，再选择上午、下午或晚上", "Choose a planned date before selecting a time of day.", "時間帯を指定する前に予定日を選んでください。"),
     "settings.invalid_timezone": ("请输入有效的 IANA 时区名称", "Enter a valid IANA timezone name.", "有効な IANA タイムゾーン名を入力してください。"),
     "settings.invalid_language": ("请选择简体中文、英语或日语", "Choose Simplified Chinese, English or Japanese.", "簡体字中国語、英語、日本語のいずれかを選んでください。"),

@@ -151,6 +151,7 @@ def conversation(cid: int, db: DB):
                     "model",
                     "provider",
                     "tools",
+                    "token_usage",
                 )
             }
             for m in rows
@@ -164,6 +165,7 @@ def events(factory, req, turn_id, lease, replay):
         if replay:
             msg = session.get(Message, turn.message_id)
             yield {"type": "conversation", "id": turn.conversation_id}
+            yield {"type": "usage", "usage": msg.token_usage}
             yield from msg.tools
             if turn.state == "done":
                 yield {"type": "delta", "text": msg.content}
