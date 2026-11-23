@@ -65,6 +65,7 @@ MESSAGES = {
     "history.cannot_undo": ("该变更无法撤销", "This change cannot be undone.", "この変更は取り消せません。"),
     "history.newer_change": ("该记录有后续变更，请先撤销最新变更", "Undo the newer change to this record first.", "先にこの項目の最新の変更を取り消してください。"),
     "task.unknown_view": ("未知任务视图", "Unknown task view.", "不明なタスクビューです。"),
+    "task.stale_status": ("任务状态已被更改，请查看最新看板后重试。", "The task status changed. Check the updated board and try again.", "タスクの状態が変更されました。最新のボードを確認して再試行してください。"),
     "task.stale_schedule": ("任务已被修改，请刷新后重新安排。", "The task changed. Refresh it before rescheduling.", "タスクが変更されました。再読み込みして予定を設定してください。"),
     "task.schedule_empty": ("请指定计划日期、时段、计划范围或清除安排。", "Specify a date, time slot or planning window, or clear the schedule.", "日付、時間帯、計画期間を指定するか、予定を解除してください。"),
     "time.window_pair": ("计划范围和起始日期必须一起设置。", "Set both the planning window and its start date.", "計画期間と開始日を一緒に指定してください。"),

@@ -54,7 +54,7 @@ export function useContainerWidth() {
     observer.observe(node)
     return () => observer.disconnect()
   }, [node])
-  return { ref, width }
+  return { ref, node, width }
 }
 export function usePane(key: Pane, fallback: number, available: number) {
   const { widths, save } = useLayout()

@@ -10,7 +10,7 @@ from .auth import require_admin
 from .db import get_db
 from .models import Project, Resource, Task, TaskChangeLog, now_iso
 from .records import columns
-from .schemas import SchedulePatch, TagInput
+from .schemas import SchedulePatch, StatusMove, TagInput
 from .tags import list_tags, create_tag
 from .uploads import open_file, store_upload
 
@@ -60,6 +60,11 @@ def task(id: int, db: Session = Depends(get_db)):
 @router.patch("/tasks/{id}")
 def update_task(id: int, data: dict, db: Session = Depends(get_db)):
     return commit(db, services.update_task(db, id, data))
+
+
+@router.patch("/tasks/{id}/status")
+def move_task(id: int, data: StatusMove, db: Session = Depends(get_db)):
+    return commit(db, services.update_task(db, id, {"status": data.status}, expected_status=data.expected_status))
 
 
 @router.patch("/tasks/{id}/schedule")

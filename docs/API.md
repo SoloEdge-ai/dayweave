@@ -41,6 +41,7 @@ sequenceDiagram
 | `GET /api/dashboard/today` | Local date, focus tasks, scheduled tasks, linked resources and reminder groups |
 | `GET, POST /api/tasks` | Filter tasks or create a task |
 | `GET, PATCH, DELETE /api/tasks/{id}` | Read, edit or soft-delete a task |
+| `PATCH /api/tasks/{id}/status` | Move a card using `status` and `expected_status`. Returns the updated task. An identical retry succeeds. A conflicting status returns 409. |
 | `PATCH /api/tasks/{id}/schedule` | Update the plan using the task's `expected_updated_at` value. Returns `task` and its `change_id` |
 | `GET, POST /api/projects` | List projects or create a project |
 | `GET, PATCH, DELETE /api/projects/{id}` | Read project details with linked tasks and resources, update or delete |

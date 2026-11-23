@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium, webkit, devices } from 'playwright'
+import { checkBoardMouse, checkBoardTouch } from './board-drag.mjs'
 import { checkCodexPicker, checkDesktopLayout, checkTabletLayout } from './layout.mjs'
 import { call, fixture } from './session.mjs'
 
@@ -413,6 +414,8 @@ try {
   await page.getByRole('heading', { name: '今日总览' }).waitFor()
   const api = page.context().request
   await checkDesktopLayout(page)
+  await checkBoardMouse(page)
+  await page.goto('/')
   const { date } = await call(api, 'GET', '/dashboard/today')
   const tomorrow = new Date(Date.parse(date + 'T12:00Z') + 86400000).toISOString().slice(0, 10)
   await page.getByRole('textbox', { name: '快捷录入' }).fill('Browser acceptance task')
@@ -640,6 +643,7 @@ try {
       assert.equal(planned.due_at, null)
       if (width === 820) assert.equal(new Date(planned.window_start + 'T12:00Z').getUTCDay(), 1)
       else assert.equal(planned.window_start.slice(-2), '01')
+      await checkBoardTouch(touch, planned, width)
       await checkVoicePlanner(touch, date, tomorrow, width, height)
       await checkDailyRollover(touch, date, width)
       await tablet.close()

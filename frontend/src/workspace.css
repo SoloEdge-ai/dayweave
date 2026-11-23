@@ -166,6 +166,16 @@ button.agenda-task:hover { background:var(--panel) }
 .board-column ul { min-height:0; overflow:auto; overscroll-behavior-y:contain; list-style:none; padding:2px; margin:0; display:grid; align-content:start; gap:6px }
 .board-card { width:100%; display:grid; gap:9px; text-align:start; padding:12px;
   background:var(--sheet); color:var(--ink); border:1px solid var(--line); border-radius:5px; box-shadow:0 1px 2px #091e4226 }
+.board-card { cursor:grab; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none }
+.board-card:disabled { cursor:progress }
+.board-card-heading { display:flex; align-items:start; justify-content:space-between; gap:6px }
+.board-card-heading > svg { flex:none; margin-top:2px; color:var(--muted) }
+.board-column:only-child .board-card-heading > svg { display:none }
+.board-column:only-child .board-card { cursor:pointer }
+.board-scroll.dragging { scroll-snap-type:none }
+.board-column.drop-target { outline:2px solid var(--accent); outline-offset:-2px; background:var(--tint) }
+.board-card.drag-source { opacity:.35 }
+.board-card.drag-overlay { pointer-events:none; cursor:grabbing; border-color:var(--accent); box-shadow:0 6px 20px #091e4233 }
 .board-card:hover { border-color:var(--accent) }
 .board-card strong { overflow-wrap:anywhere; font-weight:550; line-height:1.45; font-size:15px }
 .board-tags,.board-card-foot,.board-entry > div { display:flex; flex-wrap:wrap; align-items:center; gap:6px }

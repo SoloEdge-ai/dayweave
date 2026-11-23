@@ -41,10 +41,18 @@ class SchedulePatch(ScheduleFields):
     expected_updated_at: str = Field(min_length=1, max_length=64)
 
 
+TaskStatus = Literal["todo", "in_progress", "done", "cancelled"]
+
+
+class StatusMove(Input):
+    expected_status: TaskStatus
+    status: TaskStatus
+
+
 class TaskInput(ScheduleFields):
     title: Title
     description: Description = ""
-    status: Literal["todo", "in_progress", "done", "cancelled"] = "todo"
+    status: TaskStatus = "todo"
     priority: Literal["low", "medium", "high"] = "medium"
     category: ShortText = ""
     tags: TagNames = Field(default_factory=list)
