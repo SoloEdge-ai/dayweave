@@ -10,6 +10,55 @@ import { call, fixture } from './session.mjs'
 const languageControl = /^(界面语言|Language|言語)/
 const savePreferences = /^(保存偏好|Save preferences|設定を保存)$/
 
+async function checkResume(page, today, width) {
+  const api = page.context().request
+  const title = 'Resume workflow ' + width
+  const workLink = 'https://ci.example.test/runs/' + width
+  const task = await call(api, 'POST', '/tasks', {title, scheduled_date:today, status:'in_progress', links:[{url:workLink}]})
+  const url = '/tasks/' + task.id
+  await page.goto('/')
+  const card = page.locator('.task-row').filter({hasText:title}).first()
+  await card.getByRole('button', {name:'记一下进展 · ' + title}).tap()
+  const editor = page.getByRole('dialog', {name:'记一下进展'})
+  const note = editor.getByLabel('下次从这里继续')
+  if (width === 820) {
+    await editor.getByRole('button',{name:'语音记录'}).tap()
+    await editor.getByLabel('选择音频文件').setInputFiles(audioFixture())
+    await editor.getByRole('button',{name:'转写到输入框'}).tap()
+    await page.waitForFunction(() => document.querySelector('#resume-text')?.value.includes('机器人'))
+  }
+  await note.fill('本地已复现。')
+  await editor.getByRole('button',{name:'保存接续记录'}).tap()
+  await editor.waitFor({state:'hidden'})
+  await card.locator('.resume-line').filter({hasText:'本地已复现。'}).waitFor()
+
+  await card.getByRole('button', {name:'与助手讨论 · ' + title}).tap()
+  const assistant = page.getByRole('complementary',{name:'织日助手'})
+  const context = assistant.getByRole('region',{name:'当前任务'})
+  await context.getByText(title,{exact:true}).waitFor()
+  assert.equal(await context.getByRole('link').first().getAttribute('href'), workLink)
+  await context.getByText('本地已复现。',{exact:true}).waitFor()
+  if (process.env.DAYWEAVE_RESUME_PREVIEWS) await page.screenshot({path:join(process.env.DAYWEAVE_RESUME_PREVIEWS,'task-chat-'+width+'.png'),scale:'css'})
+  const events = await sendChat(page, '记一下，下次比较基础镜像版本')
+  assert.ok(events.some(event => event.name === 'set_resume_note'))
+  assert.equal((await call(api,'GET',url+'/resume')).text, '下次比较基础镜像版本')
+  assert.equal((await call(api,'GET',url)).scheduled_date,today)
+  await assistant.getByRole('button',{name:'收起助手'}).tap()
+  const yesterday = new Date(Date.parse(today + 'T12:00Z') - 86400000).toISOString().slice(0,10)
+  await call(api, 'PATCH', url, {scheduled_date:yesterday})
+  await page.reload()
+  const resumeCard = page.locator('.task-row').filter({hasText:title})
+  await resumeCard.locator('.resume-line').filter({hasText:'下次比较基础镜像版本'}).first().waitFor()
+  if (process.env.DAYWEAVE_RESUME_PREVIEWS) await page.screenshot({path:join(process.env.DAYWEAVE_RESUME_PREVIEWS,'continue-'+width+'.png'),scale:'css'})
+  await page.locator('.resume-plan').getByRole('button',{name:'排到今天',exact:true}).tap()
+  await page.getByRole('status').getByText('已排到今天').waitFor()
+  const replanned = await call(api,'GET',url)
+  assert.equal(replanned.scheduled_date,today)
+  assert.equal(replanned.status,'in_progress')
+  await call(api, 'DELETE', url + '?confirm=true')
+  console.log('PASS iPad '+width+' task-bound chat, personal continuation and next-day replan')
+}
+
 async function checkTaskLink(page, width) {
   const api = page.context().request
   const key = 'NAV-' + width
@@ -719,7 +768,7 @@ try {
       await lane.getByRole('button', { name: /添加任务/ }).tap()
       await lane.getByLabel('任务标题').fill(boardTitle)
       await lane.getByRole('button', { name: '添加', exact: true }).tap()
-      await lane.getByRole('button', {name: new RegExp(boardTitle)}).tap()
+      await lane.locator('.board-card').filter({hasText:boardTitle}).tap()
       await dialog.getByLabel('任务名称', {exact:true}).fill(boardTitle + ' edited')
       await dialog.getByLabel('计划范围', {exact:true}).selectOption(width === 820 ? 'week' : 'month')
       await dialog.getByLabel('截止日期', {exact:true}).fill('2030-12-31')
@@ -738,6 +787,7 @@ try {
       if (width === 820) assert.equal(new Date(planned.window_start + 'T12:00Z').getUTCDay(), 1)
       else assert.equal(planned.window_start.slice(-2), '01')
       await checkBoardTouch(touch, planned, width)
+      await checkResume(touch, date, width)
       await checkTaskLink(touch, width)
       await checkVoicePlanner(touch, date, tomorrow, width, height)
       await checkDailyRollover(touch, date, width)

@@ -5,6 +5,7 @@ import { api, dateInZone, dateLabel, errorText, periodLabels, timeLabel, taskTag
 import { localInput, toIso } from './datetime'
 import { WeekStrip, shift, monday, weekday } from './week-strip'
 import { Heading } from './pages'
+import { ResumeLine, TaskAssist } from './task-resume'
 import { TaskDestinations } from './task-links'
 import { ErrorBox, Field, IconButton, Loading, Modal, useWorkspace } from './ui'
 import { PaneGrip, useContainerWidth, usePane } from './pane-layout'
@@ -250,7 +251,9 @@ export function PlannerPage() {
       {open(task) ? <button className="agenda-task" onClick={() => setEditor({task})} aria-label={'编辑安排' + ' · ' + task.title}>
         <span>{details}</span><Pencil size={16} aria-hidden="true" />
       </button> : <div className="agenda-task"><span>{details}</span>{task.is_past_plan && <small>安排过</small>}</div>}
+      {!task.is_past_plan && <ResumeLine taskId={task.id} />}
       <TaskDestinations ids={task.resource_ids} primary={task} />
+      {!task.is_past_plan && <TaskAssist task={task} />}
       </div>
       {open(task) && <IconButton icon={Check} label={'完成任务' + ' · ' + task.title} disabled={busy} onClick={async () => {
         setBusy(true)

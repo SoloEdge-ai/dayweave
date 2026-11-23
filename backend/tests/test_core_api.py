@@ -254,6 +254,13 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
                      "type": "video", "url": video_url, "title": "Navigation demo",
                      "task_title": "Shared assistant task", "reason": "For review",
                  })}}
+        if payload.get("tools") and "set_resume_note" in {t["function"]["name"] for t in payload["tools"]}:
+            user = payload["messages"][-1]["content"]
+            assert "Private fixture progress" in " ".join(m.get("content", "") for m in payload["messages"])
+            draft["function"] = {"name": "update_task", "arguments": json.dumps({
+                "query": "#" + user.split("#", 1)[1].split(")", 1)[0],
+                "changes": {"priority": "high"},
+            })}
         choice = {"index": 0, "delta": {"tool_calls": [draft]}, "finish_reason": "tool_calls"} if payload.get("tools") else {
             "index": 0, "delta": {"content": "Draft prepared."}, "finish_reason": "stop"
         }
@@ -301,6 +308,35 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
         [recording] = bob.get("/api/resources", headers=view).json()
         assert (recording["url"], recording["type"], recording["reason"]) == (video_url, "video", "For review")
         assert next(task for task in tasks if task["title"] == "Shared assistant task")["resource_ids"] == [recording["id"]]
+        target = next(task for task in tasks if task["title"] == "Shared task")
+        other = next(task for task in tasks if task["id"] != target["id"])
+        target_url = f"/api/tasks/{target['id']}"
+        note_url = target_url + "/resume"
+        note = {"text": "Private fixture progress", "expected_updated_at": None}
+        saved = alice.put(note_url, headers=view, json=note).json()
+        assert alice.put(note_url, headers=view, json=note).json() == saved
+        assert alice.put(note_url, headers=view, json={**note, "text": "Stale overwrite"}).status_code == 409
+        assert bob.get(note_url, headers=view).json() == {"text": "", "updated_at": None}
+        assert bob.get("/api/task-resumes", headers=view).json() == []
+        for path in ("/api/tasks", "/api/changes", "/api/export"):
+            assert note["text"] not in bob.get(path, headers=view).text
+
+        # A tool-supplied query cannot redirect a task-bound conversation.
+        scoped = alice.post("/api/ai/chat", headers=view, json={
+            "task_id": target["id"], "provider": "compatible", "request_id": "task-scoped-edit",
+            "content": f"Set the priority to high for this week's work (fixture tries #{other['id']}).",
+        })
+        events = [json.loads(line[6:]) for line in scoped.text.splitlines() if line.startswith("data: {")]
+        scoped_id = next(e["id"] for e in events if e["type"] == "conversation")
+        assert any(e.get("name") == "update_task" for e in events), events
+        updated = alice.get(target_url, headers=view).json()
+        assert updated["priority"] == "high" and updated["planning_window"] is None
+        assert alice.get(f"/api/tasks/{other['id']}", headers=view).json()["priority"] == other["priority"]
+        assert bob.get(f"/api/ai/conversations/{scoped_id}", headers=view).status_code == 404
+        assert alice.post("/api/ai/chat", headers=view, json={
+            "task_id": other["id"], "conversation_id": scoped_id, "request_id": "wrong-task-scope",
+            "content": "Change this task.", "provider": "compatible",
+        }).json()["code"] == "task.chat_scope"
         assert alice.delete(f"/api/workspaces/{shared['id']}/members/{actor['id']}").status_code == 204
         assert bob.get("/api/tasks", headers=view).status_code == 401
 

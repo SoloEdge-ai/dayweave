@@ -112,6 +112,12 @@ Set either `primary_resource_id` for a selected library resource or `primary_lin
 
 A draft can change or remove proposed links before confirmation. Proposing or editing links creates zero resources and zero tasks. Confirming saves both. Opening a saved URL in the browser leaves task status unchanged.
 
+### Continue working on a task
+
+`GET /api/task-resumes` lists the signed-in account's nonempty continuation notes and their tasks in the active workspace. `GET /api/tasks/{id}/resume` reads one note. `PUT` on the same path takes `text` and the last read `expected_updated_at` (null for a first note). An empty text clears the note. Repeating a saved text succeeds, and a conflicting revision returns 409. Notes stay in account-specific records.
+
+Task conversations are listed with `GET /api/ai/conversations?task_id={id}`. Include `task_id` when sending to the conversation. The server checks task and conversation membership and binds model tools to that task.
+
 ### Workspace tags
 
 `GET /api/tags` lists the workspace catalog. `POST /api/tags` accepts `{"name":"Design"}` and returns the existing or newly created tag with its ID. Names are trimmed and compared case-insensitively. Workspaces maintain independent catalogs.

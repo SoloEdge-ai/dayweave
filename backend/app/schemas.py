@@ -79,6 +79,14 @@ class SchedulePatch(ScheduleFields):
 TaskStatus = Literal["todo", "in_progress", "done", "cancelled"]
 
 
+ResumeText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=600)]
+
+
+class ResumeNotePatch(Input):
+    text: ResumeText
+    expected_updated_at: str | None = Field(max_length=64)
+
+
 class StatusMove(Input):
     expected_status: TaskStatus
     status: TaskStatus

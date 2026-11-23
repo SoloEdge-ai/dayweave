@@ -89,6 +89,8 @@ export type Settings = {
   default_reasoning: string | null
   planning_preferences: string | null
 }
+export type ResumeNote = { text: string; updated_at: string | null }
+export type TaskResume = ResumeNote & { task: Task }
 export type Dashboard = {
   date: string
   focus: Task[]

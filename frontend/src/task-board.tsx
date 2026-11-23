@@ -7,6 +7,7 @@ import {
 import { CalendarDays, Check, CheckSquare2, Flag, GripVertical, Plus, X } from 'lucide-react'
 import { api, dateLabel, errorText, priorityLabels, statusLabels, taskTags, type Task } from './api'
 import { ErrorBox, useWorkspace } from './ui'
+import { ResumeLine, TaskAssist } from './task-resume'
 import { TaskDestinations } from './task-links'
 
 import { PaneGrip, useContainerWidth, useLayout, usePane, type Pane } from './pane-layout'
@@ -54,7 +55,8 @@ function BoardCard({ task, project, enabled, pending, moveSideways }: {
       }
     }}>
     <CardContents task={task} project={project} />
-  </button><TaskDestinations ids={task.resource_ids} primary={task} /></li>
+  </button><div className="board-card-actions"><ResumeLine taskId={task.id} />
+    <TaskDestinations ids={task.resource_ids} primary={task} /><TaskAssist task={task} /></div></li>
 }
 
 function dropAnnouncements(): Announcements {

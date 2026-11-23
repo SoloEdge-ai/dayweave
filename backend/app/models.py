@@ -70,6 +70,14 @@ task_tags = Table(
 )
 
 
+class TaskResumeNote(Base):
+    __tablename__ = "task_resume_notes"
+    account_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[str]
+
+
 class Task(Record, Base):
     __tablename__ = "tasks"
     title: Mapped[str] = mapped_column(String(500))

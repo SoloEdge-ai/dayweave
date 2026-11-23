@@ -29,12 +29,14 @@ import {
   type Resource,
   type Settings,
   type Task,
+  type TaskResume,
 } from './api'
 
 export type EditorState =
   | { kind: 'task'; task?: Task; initial?: Partial<Task> }
   | { kind: 'resource'; resource?: Resource; initial?: Partial<Resource> }
   | { kind: 'project'; project?: Project }
+  | { kind: 'resume'; task: Task }
   | {
       kind: 'confirm'
       title: string
@@ -44,6 +46,10 @@ export type EditorState =
   | null
 export const Workspace = createContext<{
   edit: (editor: EditorState) => void
+  discussTask: (taskId: number) => void
+  resumes: TaskResume[]
+  resumeByTask: Map<number, TaskResume>
+  resumeError: unknown
   notify: (message: string) => void
   refresh: () => Promise<void>
   settings: Settings | undefined
@@ -53,6 +59,10 @@ export const Workspace = createContext<{
   workspaceId: string
 }>({
   edit: () => {},
+  discussTask: () => {},
+  resumes: [],
+  resumeByTask: new Map(),
+  resumeError: null,
   notify: () => {},
   refresh: async () => {},
   settings: undefined,

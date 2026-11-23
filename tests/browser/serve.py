@@ -57,7 +57,16 @@ def run(directory):
             voice_task = "机器人" in latest_user and "任务" in latest_user
             issue_link = "https://tracker.example.test/browse/ROS-23"
             linked_task = issue_link in latest_user and latest_user.strip() != issue_link
-            if body.get("tools") and (voice_task or linked_task or "ROS2 tracing" in latest_user):
+            scoped_note = latest_user == "记一下，下次比较基础镜像版本"
+            if body.get("tools") and scoped_note:
+                names = {tool["function"]["name"] for tool in body["tools"]}
+                assert names == {"get_task", "update_task", "schedule_task", "complete_task", "set_resume_note"}
+                reference = next(m["content"] for m in body["messages"] if m["content"].startswith("Current task reference data"))
+                assert "Resume workflow" in reference and "ci.example.test" in reference
+                tool = {"index": 0, "id": "fixture-resume", "type": "function",
+                        "function": {"name": "set_resume_note", "arguments": json.dumps({"text":"下次比较基础镜像版本"})}}
+                choice = {"index": 0, "delta": {"tool_calls": [tool]}, "finish_reason": "tool_calls"}
+            elif body.get("tools") and (voice_task or linked_task or "ROS2 tracing" in latest_user):
                 if linked_task:
                     name = "create_task"
                     arguments = {"title": "ROS2 tracing 取消用例", "links": [{"url": issue_link}]}

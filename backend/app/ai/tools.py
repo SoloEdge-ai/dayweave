@@ -8,8 +8,8 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app import services
-from app.schemas import TagInput, TagNames, TaskLinks, TaskUrl
+from app import resume, services
+from app.schemas import ResumeText, TagInput, TagNames, TaskLinks, TaskUrl
 from app.tags import create_tag, list_tags
 from app.time_rules import week_bounds
 from . import workspace_tools
@@ -74,6 +74,11 @@ class Schedule(Target):
     window_start: str | None = None
     planned_start_at: str | None = None
     planned_end_at: str | None = None
+
+
+class ResumeNote(Target):
+    text: ResumeText
+    expected_updated_at: str | None = None
 
 
 class Search(Params):
@@ -150,6 +155,7 @@ DEFINITIONS = {
         "Modify one uniquely matching task. Preserve the user's own target wording.",
     ),
     "complete_task": (Target, "Complete one uniquely matching task."),
+    "set_resume_note": (ResumeNote, "Save the account’s private continuation note. Preserve the user’s wording and explicit next step."),
     "delete_task": (Target, "Propose deletion for explicit human review."),
     "list_tasks_by_date": (ByDate, "Query tasks scheduled on a local calendar day."),
     "create_project": (Project, "Create a project."),
@@ -188,10 +194,20 @@ DEFINITIONS.update(workspace_tools.DEFINITIONS)
 READ.update(workspace_tools.READ)
 
 
-def functions():
+TASK_TOOLS = {"get_task", "update_task", "schedule_task", "complete_task", "set_resume_note"}
+GENERAL_TOOLS = DEFINITIONS.keys() - {"set_resume_note"}
+
+
+def functions(allowed=GENERAL_TOOLS, *, scoped=False):
     result = []
     for name, (cls, description) in DEFINITIONS.items():
+        if name not in allowed:
+            continue
         schema = cls.model_json_schema()
+        if scoped:
+            for field in ('query', 'on_date', 'expected_updated_at'):
+                schema['properties'].pop(field, None)
+            schema['required'] = [field for field in schema.get('required', []) if field != 'query']
         # Inline Pydantic refs so nested definitions also work with compatible endpoints.
         definitions = schema.pop("$defs", {})
 
@@ -440,6 +456,9 @@ def execute(db, name, raw, conversation_id, *, allow_conflict=False, today=None,
     if name in ("create_task", "save_and_schedule_resource"):
         raise HTTPException(409, "请先在聊天卡片确认创建任务。")
     target = identify(db, data, today)
+    if name == "set_resume_note":
+        note = resume.save_note(db, target["id"], data["text"], data.get("expected_updated_at"))
+        return {"id": target["id"], "title": target["title"], "resume_note": note["text"]}
     if name == "get_task":
         return brief(target)
     if name == "delete_task":

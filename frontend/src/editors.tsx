@@ -1,4 +1,5 @@
 import { TagPicker } from './tag-picker'
+import { ResumeEditor } from './task-resume'
 import { TaskLinkEditor } from './task-links'
 import { PlanDatePicker, type PlanDate } from './plan-date'
 import { useState, type FormEvent } from 'react'
@@ -676,6 +677,7 @@ export function Editors({
   close: () => void
 }) {
   if (!item) return null
+  if (item.kind === 'resume') return <ResumeEditor key={item.task.id} task={item.task} close={close} />
   if (item.kind === 'task') return <TaskEditor item={item} close={close} />
   if (item.kind === 'resource')
     return <ResourceEditor item={item} close={close} />

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import {
   api,
+  dateLabel,
   errorText,
   modelLabel,
   responseError,
@@ -25,6 +26,7 @@ import {
   progressLabels,
   useApi,
   type Provider,
+  type Task,
   type ModelCatalog,
   workspaceHeaders,
 } from './api'
@@ -33,6 +35,7 @@ import { Emblem, ErrorBox, IconButton, useWorkspace } from './ui'
 import { TaskDraftCard, type DraftEvent } from './draft'
 import { WorkspaceCommands, actionName, allowedAction, localCommand, type ChatAction } from './chat-actions'
 import { VoiceInput } from './voice'
+import { TaskDestinations } from './task-links'
 import { httpTaskUrl } from './link-format'
 import './chat-tools.css'
 
@@ -109,13 +112,15 @@ function requestId() {
     h.slice(20),
   ].join('-')
 }
-export function Chat({ full, close }: { full: boolean; close: () => void }) {
-  const { settings, refresh, notify, accountId, workspaceId } = useWorkspace(),
-    activeConversation = 'dayweave:conversation:' + accountId + ':' + workspaceId,
+export function Chat({ full, close, taskId }: { full: boolean; close: () => void; taskId?: number }) {
+  const { settings, refresh, notify, accountId, workspaceId, resumeByTask, projects } = useWorkspace(),
+    activeConversation = 'dayweave:conversation:' + accountId + ':' + workspaceId + (taskId ? ':' + taskId : ''),
     providers = useApi<Provider[]>('/ai/providers'),
-    convs = useApi<Conversation[]>('/ai/conversations')
-  const [cid, setCid] = useState<number | null>(() => lastConversation(activeConversation)),
-    history = useApi<Conversation>('/ai/conversations/' + cid, cid !== null)
+    convs = useApi<Conversation[]>('/ai/conversations' + (taskId ? '?task_id=' + taskId : ''))
+  const task = useApi<Task>('/tasks/' + taskId, !!taskId)
+  const [selectedId, setCid] = useState<number | null>(() => lastConversation(activeConversation))
+  const cid = selectedId ?? (taskId ? convs.data?.[0]?.id ?? null : null)
+  const history = useApi<Conversation>('/ai/conversations/' + cid, cid !== null)
   const [draft, setDraft] = useState(''),
     [current, setCurrent] = useState<ChatMessage[] | null>(null),
     [busy, setBusy] = useState(false),
@@ -187,11 +192,12 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
     setShowHistory(false)
     setCommand(null)
   }
-  const pastedLink = /^https?:\/\/\S+$/i.test(draft.trim()) && httpTaskUrl(draft.trim())
+  const contextLoading = !!taskId && (!task.data || convs.isPending || (!!cid && history.isPending))
+  const pastedLink = !taskId && /^https?:\/\/\S+$/i.test(draft.trim()) && httpTaskUrl(draft.trim())
   async function send(e: FormEvent, content = draft.trim()) {
     e.preventDefault()
-    if (!content || busy || providers.isPending) return
-    const local=localCommand(content,!canSend)
+    if (!content || busy || providers.isPending || contextLoading) return
+    const local = taskId ? null : localCommand(content,!canSend)
     if(local){
       setDraft('');openCommand(local);return
     }
@@ -254,6 +260,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
         body: JSON.stringify({
           content,
           conversation_id: cid,
+          task_id: taskId,
           provider: chosen.id,
           model: chosenModel || undefined,
           reasoning: effort || undefined,
@@ -354,12 +361,27 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
           {!convs.data?.length && <p>暂无历史对话</p>}
         </div>
       )}
+      {task.data && <section className="task-chat-context" aria-label="当前任务">
+        <strong>{task.data.title}</strong>
+        <small>{[
+          statusLabels[task.data.status],
+          projects.find(project => project.id === task.data?.project_id)?.name,
+          task.data.scheduled_date ? dateLabel(task.data.scheduled_date) : task.data.window_start
+            ? (task.data.planning_window === 'week' ? '待定周' : '待定月') + ' · ' + dateLabel(task.data.window_start) : '未安排',
+        ].filter(Boolean).join(' · ')}</small>
+        {task.data.due_date && <small>{'截止日期'} · {dateLabel(task.data.due_date)} {periodLabels[task.data.due_period ?? '']}</small>}
+        {resumeByTask.get(task.data.id)?.text && <span className="resume-line">{resumeByTask.get(task.data.id)?.text}</span>}
+        <TaskDestinations ids={task.data.resource_ids} primary={task.data} />
+        <small>发送时会带上此任务的信息和你的接续记录。</small>
+      </section>}
+      {task.error && <ErrorBox message={errorText(task.error)} />}
       <div className="chat-flow">
         {command?<WorkspaceCommands spec={command} open={openCommand} close={()=>setCommand(null)} leave={()=>{setCommand(null);close()}}/>:!values.length ? (
           <div className="chat-intro">
             <div className="emblem-tile">
               <Emblem size="large" />
             </div>
+            {taskId ? <p>告诉助手进展或要修改的地方…</p> : <>
             <h2>从哪里开始？</h2>
             <div className="starter-list">
               <button type="button" className="voice-starter" aria-expanded={voice} onClick={() => {
@@ -379,7 +401,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
                   <ArrowRight size={14} />
                 </button>
               ))}
-            </div>
+            </div></>}
           </div>
         ) : (
           <div className="messages">
@@ -507,7 +529,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
             aria-label="给织日助手发消息"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="给织日助手发消息…"
+            placeholder={taskId ? '告诉助手进展或要修改的地方…' : '给织日助手发消息…'}
             onKeyDown={(e) => {
               if (
                 e.key === 'Enter' &&
@@ -531,7 +553,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
               <ChevronDown size={12} />
             </button>
             <div className="composer-controls">
-            <button className={'composer-action '+(command?'active':'')} type="button" aria-expanded={!!command} aria-label="工作区操作" title="工作区操作" onClick={()=>command?setCommand(null):openCommand({action:'menu'})}><SlidersHorizontal size={17}/></button>
+            {!taskId && <button className={'composer-action '+(command?'active':'')} type="button" aria-expanded={!!command} aria-label="工作区操作" title="工作区操作" onClick={()=>command?setCommand(null):openCommand({action:'menu'})}><SlidersHorizontal size={17}/></button>}
             <button className={'composer-action '+(voice?'active':'')} type="button" aria-expanded={voice} aria-label="语音输入" title="语音输入" onClick={()=>{setVoice(!voice);setConfig(false)}}><Mic size={17}/></button>
             {busy ? (
               <button
@@ -548,7 +570,7 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
                 className="send"
                 title="发送"
                 aria-label="发送"
-                disabled={!draft.trim() || providers.isPending}
+                disabled={!draft.trim() || providers.isPending || contextLoading}
               >
                 <ArrowUp size={17} />
               </button>
@@ -563,6 +585,7 @@ const toolNames: Record<string, string> = {
   create_task: '创建任务',
   get_task: '查看任务',
   search_tasks: '查询任务',
+  set_resume_note: '保存私人接续记录',
   update_task: '修改任务',
   complete_task: '完成任务',
   delete_task: '删除任务',

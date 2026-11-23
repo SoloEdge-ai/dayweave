@@ -67,6 +67,8 @@ MESSAGES = {
     "task.primary_conflict": ("请选择一个主要工作入口。", "Choose one primary work link.", "メインの作業リンクを一つ選択してください。"),
     "task.primary_unattached": ("请从该任务关联的资料中选择主要工作入口。", "Choose a primary work link from this task’s attachments.", "このタスクに添付された資料からメインの作業リンクを選択してください。"),
     "task.unknown_view": ("未知任务视图", "Unknown task view.", "不明なタスクビューです。"),
+    "task.chat_scope": ("请从对应任务打开此会话。", "Open this conversation from its task.", "対応するタスクからこの会話を開いてください。"),
+    "task.resume_conflict": ("接续记录已在其他地方修改。请载入最新记录后重试。", "The continuation note changed elsewhere. Load the latest note and try again.", "別の場所で続きのメモが変更されました。最新のメモを読み込んでから再試行してください。"),
     "task.stale_status": ("任务状态已被更改，请查看最新看板后重试。", "The task status changed. Check the updated board and try again.", "タスクの状態が変更されました。最新のボードを確認して再試行してください。"),
     "task.stale_schedule": ("任务已被修改，请刷新后重新安排。", "The task changed. Refresh it before rescheduling.", "タスクが変更されました。再読み込みして予定を設定してください。"),
     "task.schedule_empty": ("请指定计划日期、时段、计划范围或清除安排。", "Specify a date, time slot or planning window, or clear the schedule.", "日付、時間帯、計画期間を指定するか、予定を解除してください。"),

@@ -13,6 +13,7 @@ STRINGS = {
     "Codex 服务暂不可用，请检查连接或重新登录。": ("Codex is unavailable. Check the connection or sign in again.", "Codex を利用できません。接続を確認するかログインし直してください。"),
     "任务草稿": ("Task draft", "タスクの下書き"),
     "新增任务": ("Create task", "タスクを作成"),
+    "保存私人接续记录": ("Save private continuation note", "自分用の続きのメモを保存"),
     "修改任务": ("Update task", "タスクを更新"),
     "完成任务": ("Complete task", "タスクを完了"),
     "删除任务": ("Delete task", "タスクを削除"),

@@ -12,6 +12,24 @@ Home quick capture can prepare a linked task from a URL or from a title and link
 
 When a task has multiple destinations, the owner can choose its *Primary work link*. A failing CI run, for example, can be the first link on the task even though the assignment originated in Jira. The other sources remain attached. A task with just one link needs no setup. Opening a destination leaves the task status under the user's control.
 
+## Continue interrupted work
+
+Use **Record progress** on a task to type a short note or transcribe audio into an editable field. Each account has its own note for the task. Today places the note beside the work link. The home page shows up to three recently noted, unplanned tasks under **Pick up where you left off**. Opening a link and scheduling the task for today are separate actions. Completed and cancelled tasks leave this section.
+
+**Discuss with assistant** opens a conversation tied to the task and the signed-in account. On send, the assistant receives current task fields, linked resource names and the user's continuation note. It can change the task or record progress through the same services used by the editor. The server determines the target task from the conversation.
+
+```mermaid
+flowchart LR
+  Card["Task card"] --> Voice["Type or transcribe progress"]
+  Card --> Chat["Discuss this task with assistant"]
+  Voice --> Note["Save private continuation note"]
+  Chat --> Note
+  Chat --> Task["Apply requested task change"]
+  Note --> Home["Pick up where you left off"]
+  Home --> Work["Open work link"]
+  Home --> Today["Schedule for today"]
+```
+
 ## What to try next
 
 | Real task | Where work happens | What helps the next time | What counts as done |
@@ -20,7 +38,7 @@ When a task has multiple destinations, the owner can choose its *Primary work li
 | Write an onboarding guide | Open the editable document; keep the issue as background | “Environment setup is done. Add the container startup example.” | A shareable guide reviewed by its intended reader |
 | Run a vehicle regression test | Open the test procedure or go to the test area | “Case 2 reproduced. Capture a log on the second run.” | A log and the observed test result |
 
-**A one-line handoff to yourself.** Let someone say “Stop here for today. Next time compare the two logs.” Show that note beside the work link when they return. Preserve it through daily rollover. A task waiting for another person can show the dependency and a chosen follow-up date. The owner decides whether the note belongs in the shared task.
+**A follow-up date for blocked work.** A task waiting for another person can show the dependency and a chosen date to follow up. A separate, deliberate share action could let the owner hand over progress to a teammate.
 
 **A result at completion.** When useful, let the user attach the resulting document, log or pull request as they complete the task. A result is optional. Offline and physical work can finish with a short observation or a single tap.
 
