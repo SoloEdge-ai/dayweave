@@ -10,6 +10,7 @@ import {
   PencilLine,
 } from 'lucide-react'
 import { TagPicker } from './tag-picker'
+import { TaskDestinations, TaskLinkEditor } from './task-links'
 import { PlanDatePicker } from './plan-date'
 import { api, dateLabel, errorText, periodLabels, priorityLabels, taskTags, type Task } from './api'
 import { ErrorBox, Field, useWorkspace } from './ui'
@@ -33,6 +34,10 @@ export type DraftFields = Pick<
   | 'project_id'
   | 'category'
   | 'tags'
+  | 'resource_ids'
+  | 'links'
+  | 'primary_link_url'
+  | 'primary_resource_id'
 >
 type DraftRow = {
   index: number
@@ -124,6 +129,8 @@ export function TaskDraftCard({
     [override, setOverride] = useState(false)
   const [invalidTimes, setInvalidTimes] = useState<Record<string, string>>({})
   const hasInvalidTime = Object.keys(invalidTimes).length > 0
+  const [invalidLinks, setInvalidLinks] = useState<Record<number, boolean>>({})
+  const hasInvalidLink = Object.values(invalidLinks).some(Boolean)
   const endpoint = '/ai/confirmations/' + event.id
   function show(record: DraftEvent) {
     if (record.version < server.current.version ||
@@ -298,7 +305,7 @@ export function TaskDraftCard({
     }
   }
   async function decide(approve: boolean) {
-    if (busy || (approve && hasInvalidTime)) return
+    if (busy || (approve && (hasInvalidTime || hasInvalidLink))) return
     setBusy(true)
     setError('')
     clearTimeout(timer.current)
@@ -334,7 +341,7 @@ export function TaskDraftCard({
     }
   }
   const editable = draft.status === 'pending'
-  const saveState = hasInvalidTime ? 'error' : state
+  const saveState = hasInvalidTime || hasInvalidLink ? 'error' : state
   return (
     <section className={'draft-card ' + draft.status} aria-label="任务草稿">
       <div className="draft-head">
@@ -366,6 +373,7 @@ export function TaskDraftCard({
       </div>
       {draft.drafts.map((row) => {
         const t = row.task
+        const links = t.links ?? (row.resource ? [{ url: row.resource.url, title: row.resource.title }] : [])
         const change = (fields: Partial<DraftFields>) =>
           update(row.index, fields)
         const hasExact = Boolean(
@@ -375,6 +383,7 @@ export function TaskDraftCard({
           return (
             <div className="draft-final" key={row.index}>
               <strong>{t.title}</strong>
+              <TaskDestinations ids={t.resource_ids} links={links} primary={t} />
               <small>
                 {t.scheduled_date || (t.window_start
                   ? (t.planning_window === 'week' ? '待定周' : '待定月') + ' · ' + dateLabel(t.window_start)
@@ -445,6 +454,9 @@ export function TaskDraftCard({
                 onChange={(e) => change({ title: e.target.value })}
               />
             </Field>
+            <TaskLinkEditor ids={t.resource_ids ?? []} links={links} primary={t} onPrimary={selection => change(selection)}
+              onIds={ids => change({ resource_ids: ids })} onLinks={links => change({ links })}
+              onInvalid={invalid => setInvalidLinks(values => values[row.index] === invalid ? values : { ...values, [row.index]: invalid })} />
             <Field label="所属项目">
               <select
                 value={t.project_id ?? ''}
@@ -526,17 +538,6 @@ export function TaskDraftCard({
                 <DraftOptions labels={priorityLabels} />
               </select>
             </Field>
-            {row.resource && (
-              <a
-                className="draft-source wide"
-                href={row.resource.url}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {row.resource.title || row.resource.url}
-                <ArrowRight size={13} />
-              </a>
-            )}
             <TagPicker selected={taskTags(t)} change={tags => change({ tags })} />
             <details className="wide" open={hasExact || undefined}>
               <summary>
@@ -602,6 +603,7 @@ export function TaskDraftCard({
               disabled={
                 busy ||
                 hasInvalidTime ||
+                hasInvalidLink ||
                 draft.drafts.some((r) => !r.task.title?.trim()) ||
                 (draft.conflict && !override)
               }

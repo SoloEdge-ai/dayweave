@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
+import { httpTaskUrl, taskLinkLabel } from './link-format'
 import {
   AlertCircle,
   ArrowRight,
@@ -227,11 +228,31 @@ export function ResourceIcon({ type }: { type: string }) {
     </span>
   )
 }
+function captureLinks(text: string) {
+  const links: { url: string }[] = []
+  const value = text.trim()
+  const plain = /^https?:\/\/\S+$/i.test(value)
+  if (plain) {
+    const url = httpTaskUrl(value)
+    return { links: url ? [{ url: url.href }] : [], title: '', plain, invalid: !url }
+  }
+  let invalid = false
+  const title = value.replace(/https?:\/\/[^\s<>"，。；！？、]+/gi, raw => {
+    const url = httpTaskUrl(raw)
+    if (!url) { invalid = true; return raw }
+    if (!links.some(link => link.url === url.href)) links.push({url:url.href})
+    return ' '
+  }).replace(/\s+/g, ' ').trim()
+  return { links, title, plain, invalid }
+}
+
 export function QuickCapture() {
   const { edit, refresh, notify } = useWorkspace(),
     [text, setText] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('')
+  const capture = captureLinks(text)
+  const submitLabel = capture.links.length ? '创建关联待办' : '添加'
   return (
     <div>
       <form
@@ -243,15 +264,17 @@ export function QuickCapture() {
             edit({ kind: 'task' })
             return
           }
-          if (/^https?:\/\//i.test(value)) {
-            edit({
-              kind: 'resource',
-              initial: {
-                url: value,
-                type: /youtu|bilibili|b23\.tv/i.test(value) ? 'video' : 'web',
-              },
-            })
+          if (capture.invalid) {
+            setError('请输入有效的网页链接，链接中不能包含账户或密码。')
+            return
+          }
+          if (capture.links.length) {
+            edit({ kind:'task', initial:{
+              title: capture.title || taskLinkLabel(capture.links[0]),
+              links: capture.links,
+            } })
             setText('')
+            setError('')
             return
           }
           setBusy(true)
@@ -274,13 +297,19 @@ export function QuickCapture() {
           placeholder="添加任务、粘贴链接，或记下一个想法…"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          maxLength={300}
+          maxLength={5000}
         />
-        <button disabled={busy} title="添加" aria-label="添加">
-          <span>添加</span>
+        <button disabled={busy} title={submitLabel} aria-label={submitLabel}>
+          <span>{submitLabel}</span>
           <ArrowRight size={15} />
         </button>
       </form>
+      {capture.plain && capture.links.length > 0 && <button type="button" className="text-button" onClick={() => {
+        const url = capture.links[0].url
+        edit({ kind:'resource', initial:{ url, type:/youtu|bilibili|b23\.tv/i.test(url) ? 'video' : 'web' } })
+        setText('')
+        setError('')
+      }}>仅存资料</button>}
       {error && <ErrorBox message={error} />}
     </div>
   )

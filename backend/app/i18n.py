@@ -64,6 +64,8 @@ MESSAGES = {
     "upload.missing": ("本地文件不存在", "The local file is missing.", "ローカルファイルが見つかりません。"),
     "history.cannot_undo": ("该变更无法撤销", "This change cannot be undone.", "この変更は取り消せません。"),
     "history.newer_change": ("该记录有后续变更，请先撤销最新变更", "Undo the newer change to this record first.", "先にこの項目の最新の変更を取り消してください。"),
+    "task.primary_conflict": ("请选择一个主要工作入口。", "Choose one primary work link.", "メインの作業リンクを一つ選択してください。"),
+    "task.primary_unattached": ("请从该任务关联的资料中选择主要工作入口。", "Choose a primary work link from this task’s attachments.", "このタスクに添付された資料からメインの作業リンクを選択してください。"),
     "task.unknown_view": ("未知任务视图", "Unknown task view.", "不明なタスクビューです。"),
     "task.stale_status": ("任务状态已被更改，请查看最新看板后重试。", "The task status changed. Check the updated board and try again.", "タスクの状態が変更されました。最新のボードを確認して再試行してください。"),
     "task.stale_schedule": ("任务已被修改，请刷新后重新安排。", "The task changed. Refresh it before rescheduling.", "タスクが変更されました。再読み込みして予定を設定してください。"),

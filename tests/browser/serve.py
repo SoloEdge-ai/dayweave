@@ -55,8 +55,13 @@ def run(directory):
             choice = {"index": 0, "delta": {"content": replies[language]}, "finish_reason": "stop"}
             latest_user = next(m["content"] for m in reversed(body["messages"]) if m["role"] == "user")
             voice_task = "机器人" in latest_user and "任务" in latest_user
-            if body.get("tools") and (voice_task or "ROS2 tracing" in latest_user):
-                if voice_task:
+            issue_link = "https://tracker.example.test/browse/ROS-23"
+            linked_task = issue_link in latest_user and latest_user.strip() != issue_link
+            if body.get("tools") and (voice_task or linked_task or "ROS2 tracing" in latest_user):
+                if linked_task:
+                    name = "create_task"
+                    arguments = {"title": "ROS2 tracing 取消用例", "links": [{"url": issue_link}]}
+                elif voice_task:
                     name = "create_task"
                     arguments = {"title": "机器人跟踪", "estimated_minutes": 30}
                 elif "标记完成" in latest_user:
@@ -68,6 +73,9 @@ def run(directory):
                     title = "ROS2 tracing 取消用例" if "取消用例" in latest_user else titles[language]
                     arguments = {"title": title, "scheduled_date": "明天",
                                  "scheduled_period": "afternoon", "due_date": "周五", "estimated_minutes": 60}
+                    issue = "https://tracker.example.test/browse/ROS-21"
+                    if issue in latest_user:
+                        arguments["links"] = [{"url": issue}]
                 tool = {"index": 0, "id": "fixture-call", "type": "function",
                         "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}}
                 choice = {"index": 0, "delta": {"tool_calls": [tool]}, "finish_reason": "tool_calls"}

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { TaskBoard } from './task-board'
+import { TaskDestinations } from './task-links'
 import { WeekStrip, monday } from './week-strip'
 import { i18n } from './i18n'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -21,7 +22,6 @@ import {
   FolderOpen,
   Inbox,
   ListChecks,
-  Paperclip,
   Pencil,
   Plus,
   Search,
@@ -191,6 +191,7 @@ export function TaskRow({
       >
         <span>{t.status === 'done' && <Check size={13} />}</span>
       </button>
+      <div className="task-row-content">
       <button
         className="row-main"
         onClick={() => edit({ kind: 'task', task: t })}
@@ -225,15 +226,11 @@ export function TaskRow({
               {dateLabel(due)}{t.due_at ? ' '+timeLabel(t.due_at,zone) : t.due_period ? ' '+periodLabels[t.due_period] : ''}截止
             </span>
           )}
-          {t.resource_ids?.length > 0 && (
-            <span>
-              <Paperclip size={12} />
-              {t.resource_ids.length}
-            </span>
-          )}
           {t.status !== 'todo' && <span>{statusLabels[t.status]}</span>}
         </span>
       </button>
+      <TaskDestinations ids={t.resource_ids} primary={t} />
+      </div>
       <span className={'priority ' + t.priority}>
         <i />
         {priorityLabels[t.priority] ?? t.priority}

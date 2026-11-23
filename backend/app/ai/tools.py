@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import services
-from app.schemas import TagInput, TagNames
+from app.schemas import TagInput, TagNames, TaskLinks, TaskUrl
 from app.tags import create_tag, list_tags
 from app.time_rules import week_bounds
 from . import workspace_tools
@@ -37,6 +37,9 @@ class TaskFields(Params):
     due_period: Literal["morning", "afternoon", "evening"] | None = None
     due_at: str | None = None
     resource_ids: list[int] | None = Field(None, max_length=20)
+    primary_resource_id: int | None = Field(None, gt=0)
+    primary_link_url: TaskUrl | None = None
+    links: TaskLinks | None = Field(None, description="External URLs supplied by the user to attach to this task. Existing attachments are retained unless resource_ids are explicitly set.")
     status: Literal["todo", "in_progress", "done", "cancelled"] | None = None
 
 
@@ -124,6 +127,8 @@ class Watch(Resource):
     tags: TagNames | None = None
     task_description: str | None = None
     task_project_id: int | None = Field(None, gt=0)
+    links: TaskLinks | None = None
+    primary_link_url: TaskUrl | None = None
 
 
 class Plan(ByDate):
@@ -345,6 +350,7 @@ def brief(row):
         "is_past_plan",
         "estimated_minutes",
         "resource_ids",
+        "primary_resource_id",
         "type",
         "url",
         "current_position",

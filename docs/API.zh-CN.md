@@ -104,6 +104,14 @@ sequenceDiagram
 2. 编辑版本 1 的第一项时，向 `PATCH /api/ai/confirmations/{id}/draft` 发送 `{"version":1,"drafts":[{"index":0,"task":{"title":"整理笔记","estimated_minutes":45}}]}`。下一次请求使用服务端返回的版本。过期版本返回 HTTP 409。修改后的卡片会同步保存到聊天记录。
 3. 创建任务时提交 `{"approve":true,"version":2}`，其中版本替换为实际的最新值。计划与截止要求冲突时，用户可明确设置 `allow_due_conflict:true`。取消则提交 `{"approve":false,"version":2}`。返回对象包含 `status`、`result` 和更新后的 `event`。已创建条目带有实际的 `task_id`；取消后任务列表保留原状。
 
+### 任务链接
+
+写入任务或修改草稿时可以传入 `links` 数组。每项包含必填的 HTTP(S) `url` 和可选的 `title`。保存任务时会将这些 URL 和保留的 `resource_ids` 一起关联。服务在同一事务内复用或创建当前工作区的资料，并关联任务。修改已有的关联时传入需要保留的资料 ID。读取任务返回已保存的 `resource_ids`，对应工作区资料库里的记录。
+
+通过 `primary_resource_id` 指定选中的资料，或通过 `primary_link_url` 指定本次添加的链接，作为主要工作入口。两者至多指定一项。保存后的任务返回 `primary_resource_id`；移除关联时会清空相应的主入口。
+
+确认前可以编辑或移除草稿里的链接。提议和编辑草稿时，任务和资料的数量维持原值。确认时才一起保存。在浏览器中打开已保存链接，任务状态保持原值。
+
 ### 工作区标签
 
 `GET /api/tags` 列出工作区标签。`POST /api/tags` 接受 `{"name":"设计"}`，返回已有或新建标签及其 ID。名称会去掉首尾空格，匹配时忽略大小写。各工作区分别保存自己的标签。

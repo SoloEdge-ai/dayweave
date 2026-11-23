@@ -22,10 +22,12 @@ export function workspaceLink(path: string) {
   return activeWorkspace ? path + (path.includes('?') ? '&' : '?') + 'workspace=' + encodeURIComponent(activeWorkspace) : path
 }
 export type Tag = { id: Id; name: string }
+export type TaskLink = { url: string; title?: string | null }
+export type PrimaryDestination = { primary_resource_id?: number | null; primary_link_url?: string | null }
 export function taskTags(task: { tags?: string[]; category?: string | null }): string[] {
   return task.tags ?? (task.category?.trim() ? [task.category.trim()] : [])
 }
-export type Task = {
+export type Task = PrimaryDestination & {
   id: Id
   title: string
   description: string | null
@@ -49,6 +51,7 @@ export type Task = {
   completed_at: string | null
   pinned: boolean
   resource_ids: Id[]
+  links?: TaskLink[]
 }
 export type Resource = {
   id: Id

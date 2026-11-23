@@ -104,6 +104,14 @@ Each `usage` event is a cumulative snapshot for this user turn. Read `usage.tota
 2. To edit the first item in version 1, send `{"version":1,"drafts":[{"index":0,"task":{"title":"Prepare notes","estimated_minutes":45}}]}` to `PATCH /api/ai/confirmations/{id}/draft`. Use the revision returned by the server for the next request. A stale revision returns HTTP 409. The edited card is persisted in the transcript.
 3. To create the task, post `{"approve":true,"version":2}` with the actual current revision. If the reviewed schedule conflicts with its deadline, the user can explicitly set `allow_due_conflict:true`. To cancel, send `{"approve":false,"version":2}`. The response contains `status`, `result` and the updated `event`. Approved items include their saved `task_id`; the task list is unchanged after cancellation.
 
+### Task links
+
+Task writes and draft edits accept `links`, an array of objects with a required HTTP(S) `url` and an optional `title`. A task write associates the submitted URLs alongside retained `resource_ids`. Saving resolves or creates resources in the current workspace and attaches them in the same transaction. Send the IDs to retain when editing existing associations. Reads expose the saved `resource_ids`, which resolve against the workspace library.
+
+Set either `primary_resource_id` for a selected library resource or `primary_link_url` for a selected inline URL to identify the main work destination. Saved tasks expose `primary_resource_id`. Removing the destination clears the preference.
+
+A draft can change or remove proposed links before confirmation. Proposing or editing links creates zero resources and zero tasks. Confirming saves both. Opening a saved URL in the browser leaves task status unchanged.
+
 ### Workspace tags
 
 `GET /api/tags` lists the workspace catalog. `POST /api/tags` accepts `{"name":"Design"}` and returns the existing or newly created tag with its ID. Names are trimmed and compared case-insensitively. Workspaces maintain independent catalogs.

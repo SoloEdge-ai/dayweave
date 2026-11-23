@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { chromium, webkit, devices } from 'playwright'
 import { checkBoardMouse, checkBoardTouch } from './board-drag.mjs'
 import { checkCodexPicker, checkDesktopLayout, checkTabletLayout } from './layout.mjs'
@@ -8,6 +9,56 @@ import { call, fixture } from './session.mjs'
 
 const languageControl = /^(界面语言|Language|言語)/
 const savePreferences = /^(保存偏好|Save preferences|設定を保存)$/
+
+async function checkTaskLink(page, width) {
+  const api = page.context().request
+  const key = 'NAV-' + width
+  const url = 'https://work-items.example.test/company/browse/' + key + '?view=board#activity'
+  const title = '调查定位漂移 · ' + key
+  if (width === 820) {
+    await page.goto('/')
+    await page.getByLabel('快捷录入').fill(url)
+    await page.getByRole('button', {name:'创建关联待办', exact:true}).tap()
+  } else {
+    await page.goto('/tasks/today')
+    await page.getByRole('button', {name:'新建任务', exact:true}).first().tap()
+  }
+  const editor = page.getByRole('dialog', {name:'新建任务'})
+  await editor.getByLabel('任务名称', {exact:true}).fill(title)
+  await editor.getByLabel('计划范围', {exact:true}).selectOption('today')
+  if (width !== 820) await editor.getByLabel('任务链接', {exact:true}).fill(url)
+  await editor.getByRole('button', {name:'保存任务', exact:true}).tap()
+  await editor.waitFor({state:'hidden'})
+  const [task] = await call(api, 'GET', '/tasks?q=' + encodeURIComponent(title))
+  const [resource] = (await call(api,'GET','/resources')).filter(r => r.url === url)
+  assert.deepEqual(task.resource_ids, [resource.id])
+
+  await page.context().route('https://work-items.example.test/**', route =>
+    route.fulfill({contentType:'text/html', body:'<title>Issue fixture</title>'}))
+  for (const view of ['/', '/board?q=' + encodeURIComponent(title)]) {
+    await page.goto(view)
+    const row = page.locator(view === '/' ? '.task-row' : '.board-column li').filter({hasText:title}).first()
+    const link = row.getByRole('link', {name:new RegExp(key)})
+    assert.equal(await link.getAttribute('href'),url)
+    if (view.startsWith('/board') && process.env.DAYWEAVE_LINK_PREVIEWS) {
+      await link.scrollIntoViewIfNeeded()
+      await page.screenshot({path:join(process.env.DAYWEAVE_LINK_PREVIEWS, 'task-link-' + width + '.png'), scale:'css'})
+    }
+    const [popup] = await Promise.all([page.waitForEvent('popup'), link.tap()])
+    await popup.waitForLoadState()
+    assert.equal(popup.url(),url)
+    await popup.close()
+    assert.equal(await page.getByRole('dialog').count(),0)
+    assert.equal(await page.locator('.drag-overlay').count(),0)
+    assert.equal((await call(api,'GET','/tasks/'+task.id)).status,'todo')
+  }
+  if (width === 1180) {
+    await page.goto('/planner?view=today')
+    const agenda = page.locator('.planner-agenda-row').filter({hasText:title})
+    assert.equal(await agenda.getByRole('link', {name:new RegExp(key)}).getAttribute('href'), url)
+  }
+  console.log('PASS iPad '+width+' pasted task link and direct issue access from Today and Board')
+}
 
 function audioFixture() {
   if (process.env.DAYWEAVE_TEST_VOICE_WAV) return process.env.DAYWEAVE_TEST_VOICE_WAV
@@ -450,7 +501,7 @@ try {
   await page.goto('/tasks/today')
   const taskTitle = '观看《Browser video》'
   await page.getByRole('button', { name: '编辑“' + taskTitle + '”' }).click()
-  const resourceLink = page.getByRole('link', { name: 'Browser video', exact: true })
+  const resourceLink = page.getByRole('dialog').locator('a').filter({hasText:'Browser video'}).first()
   assert.equal(await resourceLink.getAttribute('href'), link)
   await page.context().route('https://www.youtube.com/**', route => route.fulfill({ body: 'Video fixture' }))
   const [popup] = await Promise.all([page.waitForEvent('popup'), resourceLink.click()])
@@ -482,7 +533,10 @@ try {
   console.log('PASS provider setup, model catalog, streamed chat and persistent transcript with a local simulator')
 
   await page.getByRole('button', { name: '新建对话', exact: true }).click()
-  const request = '明天下午花一个小时学习 ROS2 tracing，周五前完成笔记。'
+  const issue = 'https://tracker.example.test/browse/ROS-21'
+  const replacement = 'https://tracker.example.test/browse/ROS-22'
+  const extraLink = 'https://notes.example.test/onboarding?section=trace#checklist'
+  const request = '明天下午花一个小时学习 ROS2 tracing，周五前完成笔记。关联 ' + issue
   const renamed = 'ROS2 tracing 实践复盘'
   const proposalEvents = await sendChat(page, request)
   const initial = proposalEvents.find(e => e.type === 'task_draft')
@@ -495,6 +549,11 @@ try {
   const queriedTasks = () => call(api, 'GET', '/tasks?q=ROS2')
   assert.deepEqual(await queriedTasks(), [])
   const card = page.getByRole('region', { name: '任务草稿', exact: true })
+  await card.getByRole('link', {name:/ROS-21/}).waitFor()
+  const resourceCount = (await call(api, 'GET','/resources')).length
+  await card.getByRole('button', {name:'移除链接 · Jira · ROS-21',exact:true}).click()
+  await card.getByLabel('任务链接', {exact:true}).fill(replacement)
+  await card.getByRole('button', {name:'添加链接',exact:true}).click()
   await card.getByLabel('任务标题', { exact: true }).fill(renamed)
   await card.getByLabel('计划日期', { exact: true }).fill(date)
   await card.getByLabel('预计耗时（分钟）', { exact: true }).fill('45')
@@ -502,6 +561,8 @@ try {
   const expected = { title: renamed, scheduled_date: date, estimated_minutes: 45 }
   const edited = await waitForSavedDraft(api, initial.id, expected)
   assert.ok(edited.version > initial.version)
+  assert.deepEqual(edited.drafts[0].task.links.map(link => link.url),[replacement])
+  assert.equal((await call(api, 'GET','/resources')).length, resourceCount)
   assert.deepEqual(await queriedTasks(), [])
   await page.reload()
   await card.getByLabel('任务标题', { exact: true }).waitFor()
@@ -523,6 +584,12 @@ try {
     await touch.getByRole('button', { name: draftConversation.title, exact: true }).tap()
     const tabletCard = touch.getByRole('region', { name: '任务草稿', exact: true })
     assert.equal(await tabletCard.getByLabel('任务标题', { exact: true }).inputValue(), renamed)
+    await tabletCard.getByRole('link', {name:/ROS-22/}).waitFor()
+    await tabletCard.getByLabel('任务链接', {exact:true}).fill(extraLink)
+    await tabletCard.getByLabel('主要工作入口', {exact:true}).selectOption({label:'notes.example.test/onboarding'})
+    await waitForSavedDraft(api, initial.id, {primary_link_url:extraLink})
+    assert.equal((await call(api, 'GET','/resources')).length, resourceCount)
+    assert.deepEqual(await queriedTasks(), [])
     const [decision] = await Promise.all([
       touch.waitForResponse(r => r.url().endsWith('/api/ai/confirmations/' + initial.id) && r.request().method() === 'POST'),
       tabletCard.getByRole('button', { name: '确认创建', exact: true }).tap(),
@@ -538,6 +605,11 @@ try {
   const [createdByChat] = saved
   for (const [key, value] of Object.entries(expected)) assert.equal(createdByChat[key], value)
   assert.equal(createdByChat.status, 'todo')
+  const library = await call(api, 'GET','/resources')
+  assert.equal(createdByChat.primary_resource_id, library.find(r => r.url === extraLink).id)
+  assert.deepEqual(library.filter(r => createdByChat.resource_ids.includes(r.id)).map(r => r.url).sort(),
+    [replacement, extraLink].sort())
+  assert.ok(!library.some(r => r.url === issue))
   assert.equal(createdByChat.due_date, proposed.due_date)
   assert.equal(createdByChat.planned_start_at, null)
   const approved = await call(api, 'GET', '/ai/confirmations/' + initial.id)
@@ -551,12 +623,33 @@ try {
   assert.equal((await queriedTasks())[0].status, 'done')
   await page.goto('/tasks/today')
   await page.getByRole('checkbox', { name: '重新打开“' + renamed + '”' }).waitFor()
+  const todayRow = page.locator('.task-row').filter({hasText:renamed})
+  assert.equal(await todayRow.getByRole('link').first().getAttribute('href'),extraLink)
+  await todayRow.getByRole('button', {name:'编辑“' + renamed + '”',exact:true}).click()
+  const linkedEditor = page.getByRole('dialog', {name:'编辑任务'})
+  assert.match(await linkedEditor.getByLabel('主要工作入口', {exact:true}).locator('option:checked').innerText(), /notes\.example\.test/)
+  await linkedEditor.getByRole('button', {name:/^移除链接 · notes\.example\.test/}).click()
+  await linkedEditor.getByRole('button', {name:'保存任务',exact:true}).click()
+  await linkedEditor.waitFor({state:'hidden'})
+  assert.equal((await queriedTasks())[0].primary_resource_id,null)
+  await page.reload()
+  const remaining = todayRow.getByRole('link', {name:/ROS-22/})
+  await page.context().route(replacement, route => route.fulfill({body:'Issue fixture'}))
+  const [issuePage] = await Promise.all([page.waitForEvent('popup'), remaining.click()])
+  await issuePage.waitForLoadState()
+  assert.equal(issuePage.url(),replacement)
+  await issuePage.close()
   console.log('PASS draft edits survive reload, iPad confirmation creates exactly one edited task, chat completes it')
 
   await page.goto('/chat')
-  const cancelDraft = (await sendChat(page, '为 ROS2 tracing 创建取消用例')).find(e => e.type === 'task_draft')
+  const cancelledURL = 'https://tracker.example.test/browse/ROS-23'
+  const cancelDraft = (await sendChat(page, cancelledURL, {
+    composer:'给织日助手发消息', send:'创建关联待办', stop:'停止生成',
+  })).find(e => e.type === 'task_draft')
   assert.ok(cancelDraft)
   const cancel = page.getByRole('button', { name: '取消草稿', exact: true })
+  const pendingCard = page.getByRole('region', {name:'任务草稿'}).filter({has:cancel})
+  assert.equal(await pendingCard.getByRole('link', {name:/ROS-23/}).getAttribute('href'), cancelledURL)
   const [cancelled] = await Promise.all([
     page.waitForResponse(r => r.url().endsWith('/api/ai/confirmations/' + cancelDraft.id) && r.request().method() === 'POST'),
     cancel.click(),
@@ -564,6 +657,7 @@ try {
   assert.ok(cancelled.ok(), await cancelled.text())
   assert.equal((await call(api, 'GET', '/ai/confirmations/' + cancelDraft.id)).status, 'cancelled')
   assert.deepEqual((await queriedTasks()).map(t => t.id), [createdByChat.id])
+  assert.ok(!(await call(api, 'GET','/resources')).some(r => r.url === cancelledURL))
   await page.reload()
   await page.getByText('草稿已取消', { exact: true }).first().waitFor()
   assert.equal(await cancel.count(), 0)
@@ -644,6 +738,7 @@ try {
       if (width === 820) assert.equal(new Date(planned.window_start + 'T12:00Z').getUTCDay(), 1)
       else assert.equal(planned.window_start.slice(-2), '01')
       await checkBoardTouch(touch, planned, width)
+      await checkTaskLink(touch, width)
       await checkVoicePlanner(touch, date, tomorrow, width, height)
       await checkDailyRollover(touch, date, width)
       await tablet.close()

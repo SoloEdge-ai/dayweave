@@ -33,6 +33,7 @@ import { Emblem, ErrorBox, IconButton, useWorkspace } from './ui'
 import { TaskDraftCard, type DraftEvent } from './draft'
 import { WorkspaceCommands, actionName, allowedAction, localCommand, type ChatAction } from './chat-actions'
 import { VoiceInput } from './voice'
+import { httpTaskUrl } from './link-format'
 import './chat-tools.css'
 
 type ToolItem = {
@@ -186,9 +187,9 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
     setShowHistory(false)
     setCommand(null)
   }
-  async function send(e: FormEvent) {
+  const pastedLink = /^https?:\/\/\S+$/i.test(draft.trim()) && httpTaskUrl(draft.trim())
+  async function send(e: FormEvent, content = draft.trim()) {
     e.preventDefault()
-    const content = draft.trim()
     if (!content || busy || providers.isPending) return
     const local=localCommand(content,!canSend)
     if(local){
@@ -495,6 +496,10 @@ export function Chat({ full, close }: { full: boolean; close: () => void }) {
           setDraft(previous=>previous.trim()?previous+'\n'+text:text)
           setVoice(false);input.current?.focus()
         }}/>}
+        {pastedLink && !busy && <button type="button" className="text-button" disabled={providers.isPending}
+          onClick={e => void send(e, '创建一个待办，查看并关联这个链接。' + '\n' + draft.trim())}>
+          <Plus size={15} />创建关联待办
+        </button>}
         <form className="composer" onSubmit={send}>
           <textarea
             ref={input}
