@@ -5,12 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .i18n import DomainError
-from . import services
+from . import resume, services
 from .auth import require_admin
 from .db import get_db
 from .models import Project, Resource, Task, TaskChangeLog, now_iso
 from .records import columns
-from .schemas import SchedulePatch, StatusMove, TagInput
+from .schemas import ResumeNotePatch, SchedulePatch, StatusMove, TagInput
 from .tags import list_tags, create_tag
 from .uploads import open_file, store_upload
 
@@ -38,6 +38,21 @@ def tasks(view: str = "all", q: str | None = Query(None, max_length=500), projec
           scheduled_date: date | None = None, due_date: date | None = None, db: Session = Depends(get_db)):
     return services.list_tasks(db, view=view, q=q, project_id=project_id, status=status, priority=priority,
                                category=category, scheduled_date=scheduled_date, due_date=due_date)
+
+
+@router.get("/task-resumes")
+def resumes(db: Session = Depends(get_db)):
+    return resume.list_notes(db)
+
+
+@router.get("/tasks/{id}/resume")
+def task_resume(id: int, db: Session = Depends(get_db)):
+    return resume.get_note(db, id)
+
+
+@router.put("/tasks/{id}/resume")
+def save_task_resume(id: int, data: ResumeNotePatch, db: Session = Depends(get_db)):
+    return commit(db, resume.save_note(db, id, data.text, data.expected_updated_at))
 
 
 @router.get("/planner/history")

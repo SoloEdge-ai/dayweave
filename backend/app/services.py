@@ -73,9 +73,36 @@ def _fields(previous, schema):
     return {k: v for k, v in (previous or {}).items() if k in schema.model_fields}
 
 
+PRIMARY_FIELDS = {"primary_resource_id", "primary_link_url"}
+
+
+def merge_task_fields(previous, changes):
+    values = merge_schedule(previous, changes)
+    if PRIMARY_FIELDS.intersection(changes):
+        # Choosing either representation replaces the previous choice.
+        values.update({key: changes.get(key) for key in PRIMARY_FIELDS})
+    return values
+
+
+def selected_primary(task, resource_urls, *, explicit):
+    """Validate against this task's attachments; draft URLs can still be unsaved."""
+    if task.primary_link_url:
+        for resource_id, url in resource_urls.items():
+            if task.primary_link_url == url:
+                return resource_id
+        if any(link.url == task.primary_link_url for link in task.links):
+            return None
+    elif task.primary_resource_id is None or task.primary_resource_id in resource_urls:
+        return task.primary_resource_id
+    if explicit:
+        raise DomainError(422, "task.primary_unattached")
+    task.primary_link_url = task.primary_resource_id = None
+    return None
+
+
 def _write_task(db, row, data, source, conversation_id, *, include_change=False):
     before = snapshot(row) if row.id else None
-    merged = merge_schedule(_fields(before, TaskInput),data)
+    merged = merge_task_fields(_fields(before, TaskInput),data)
     if data.get("due_at") and "due_date" not in data:
         merged["due_date"] = None
     if data.get("due_date") and "due_at" not in data:
@@ -91,11 +118,20 @@ def _write_task(db, row, data, source, conversation_id, *, include_change=False)
     apply_time_rules(task, get_settings(db)["timezone"], check_due=changed_time)
     if task.project_id:
         active(db, Project, task.project_id)
-    row.resources = links(db, Resource, task.resource_ids)
+    resource_ids = set(task.resource_ids)
+    for link in task.links:
+        resource = create_resource(db, {"url": link.url, "title": link.resource_title()},
+                                   source=source, conversation_id=conversation_id)
+        resource_ids.add(resource["id"])
+    if len(resource_ids) > 500:
+        raise DomainError(422, "validation.length")
+    row.resources = links(db, Resource, resource_ids)
+    task.primary_resource_id = selected_primary(task, {r.id: r.url for r in row.resources},
+                                               explicit=bool(PRIMARY_FIELDS.intersection(data)))
     if before is None or "tags" in data or "category" in data:
         row.tags = resolve_tags(db, task.tags)
         task.category = row.tags[0].name if row.tags else ""
-    for key, value in task.model_dump(exclude={"tags", "resource_ids", "allow_due_conflict"}).items():
+    for key, value in task.model_dump(exclude={"tags", "resource_ids", "links", "primary_link_url", "allow_due_conflict"}).items():
         setattr(row, key, value.isoformat(timespec="microseconds") if isinstance(value, datetime) else value)
     row.completed_at = (row.completed_at or now_iso()) if row.status == "done" else None
     db.add(row)
@@ -378,7 +414,8 @@ def undo(db, id, *, source="manual", conversation_id=None):
             row.resources = links(db, Resource, restore["resource_ids"])
             names = restore.get("tags", [restore["category"]] if restore.get("category","").strip() else [])
             row.tags = resolve_tags(db, names)
-            restore = {**restore, "category": row.tags[0].name if row.tags else ""}
+            restore = {**restore, "category": row.tags[0].name if row.tags else "",
+                       "primary_resource_id": restore.get("primary_resource_id")}
         if model is Resource:
             row.projects = links(db, Project, restore["project_ids"])
             if restore["url"]:

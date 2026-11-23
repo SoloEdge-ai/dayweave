@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { I18nextProvider, useTranslation } from 'react-i18next'
 import { i18n, setLanguage } from './i18n'
@@ -50,6 +50,7 @@ import {
   type Project,
   type Resource,
   type Settings,
+  type TaskResume,
   type Access,
   type Account,
   type WorkspaceInfo,
@@ -156,7 +157,10 @@ function Shell({ logout, account, workspace, switcher }: {
     client = useQueryClient()
   const settings = useApi<Settings>('/settings'),
     projects = useApi<Project[]>('/projects'),
-    resources = useApi<Resource[]>('/resources')
+    resources = useApi<Resource[]>('/resources'),
+    resumeQuery = useApi<TaskResume[]>('/task-resumes')
+  const resumeByTask = useMemo(() => new Map(resumeQuery.data?.map(note => [note.task.id, note])), [resumeQuery.data])
+  const [assistantTask, setAssistantTask] = useState<number>()
   const large = useMedia('(min-width: 1260px)'),
     mobileNav = useMedia('(max-width: 899px)') || (loc.pathname === '/planner' && !large),
     dark = useMedia('(prefers-color-scheme: dark)')
@@ -184,6 +188,7 @@ function Shell({ logout, account, workspace, switcher }: {
     document.title = title + ' · 织日 DayWeave'
     setNavOpen(false)
     setPlannerAssistant(false)
+    setAssistantTask(undefined)
     if (!large || board) setAiOpen(false)
   }, [loc.pathname, board, large, title])
   useEffect(() => {
@@ -247,8 +252,9 @@ function Shell({ logout, account, workspace, switcher }: {
     }
   }, [settings.data?.timezone, refresh])
   const activateAssistant = planner ? setPlannerAssistant : setAiOpen
-  const close = () => activateAssistant(false),
-    showAi = (planner ? plannerAssistant : aiOpen) && !full
+  const close = () => { activateAssistant(false); setAssistantTask(undefined) }
+  const discussTask = (taskId: number) => { setEditor(null); setAssistantTask(taskId); activateAssistant(true) }
+  const showAi = (planner ? plannerAssistant : aiOpen) && !full
   const viewport = useContainerWidth()
   const navPane = usePane('navigation', mobileNav ? 265 : large ? 206 : 190,
     mobileNav ? viewport.width - 32 : viewport.width - (showAi && dockAssistant ? 840 : 540))
@@ -263,6 +269,10 @@ function Shell({ logout, account, workspace, switcher }: {
         accountId: account.id,
         workspaceId: workspace.id,
         edit: setEditor,
+        discussTask,
+        resumes: resumeQuery.data ?? [],
+        resumeByTask,
+        resumeError: resumeQuery.error,
         notify,
         refresh,
       }}
@@ -316,7 +326,7 @@ function Shell({ logout, account, workspace, switcher }: {
               {!full && (
                 <button
                   className={'assistant-toggle ' + (showAi ? 'selected' : '')}
-                  onClick={() => activateAssistant(!showAi)}
+                  onClick={() => showAi ? close() : activateAssistant(true)}
                   aria-label={showAi ? '收起织日助手' : '打开织日助手'}
                   aria-expanded={showAi}
                 >
@@ -346,7 +356,7 @@ function Shell({ logout, account, workspace, switcher }: {
           </main>
         </div>
         {showAi && dockAssistant && <div className="docked-pane" id={assistantPane.id}>
-          <Chat full={false} close={close} /><PaneGrip pane={assistantPane} edge="left" /></div>}
+          <Chat key={assistantTask ?? 'workspace'} taskId={assistantTask} full={false} close={close} /><PaneGrip pane={assistantPane} edge="left" /></div>}
       </div>
       {mobileNav && (
         <Dialog.Root open={navOpen} onOpenChange={setNavOpen}>
@@ -369,7 +379,7 @@ function Shell({ logout, account, workspace, switcher }: {
         </Dialog.Root>
       )}
       {!dockAssistant && (
-        <Dialog.Root open={showAi} onOpenChange={activateAssistant}>
+        <Dialog.Root open={showAi} onOpenChange={open => open ? activateAssistant(true) : close()}>
           <Dialog.Portal>
             <Dialog.Overlay className="scrim" />
             <Dialog.Content
@@ -378,7 +388,7 @@ function Shell({ logout, account, workspace, switcher }: {
             >
               <PaneGrip pane={assistantPane} edge="left" />
               <Dialog.Title className="sr-only">织日助手</Dialog.Title>
-              <Chat full={false} close={close} />
+              <Chat key={assistantTask ?? 'workspace'} taskId={assistantTask} full={false} close={close} />
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>

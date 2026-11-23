@@ -28,6 +28,7 @@ class ChatRequest(Params):
     model: str | None = Field(None, max_length=180)
     reasoning: str | None = Field(None, max_length=40)
     conversation_id: int | None = Field(None, gt=0)
+    task_id: int | None = Field(None, gt=0)
     request_id: str = Field(min_length=8, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
 
 
@@ -114,10 +115,12 @@ def disconnect(db: DB):
 
 
 @router.get("/conversations")
-def conversations(db: DB):
+def conversations(db: DB, task_id: int | None = Query(None, gt=0)):
+    if task_id is not None:
+        services.get_task(db, task_id)
     return [
         {"id": c.id, "title": c.title, "created_at": c.created_at}
-        for c in db.scalars(select(Conversation).order_by(Conversation.id.desc()))
+        for c in db.scalars(select(Conversation).where(Conversation.task_id == task_id).order_by(Conversation.id.desc()))
     ]
 
 
@@ -126,6 +129,8 @@ def conversation(cid: int, db: DB):
     conv = db.get(Conversation, cid)
     if not conv:
         raise HTTPException(404, "会话不存在。")
+    if conv.task_id is not None:
+        services.get_task(db, conv.task_id)
     for pending in db.scalars(
         select(PendingAction).where(
             PendingAction.conversation_id == cid, PendingAction.status == "pending"

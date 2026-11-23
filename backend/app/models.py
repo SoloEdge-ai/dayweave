@@ -70,6 +70,14 @@ task_tags = Table(
 )
 
 
+class TaskResumeNote(Base):
+    __tablename__ = "task_resume_notes"
+    account_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[str]
+
+
 class Task(Record, Base):
     __tablename__ = "tasks"
     title: Mapped[str] = mapped_column(String(500))
@@ -77,6 +85,7 @@ class Task(Record, Base):
     status: Mapped[str] = mapped_column(String, default="todo", index=True)
     priority: Mapped[str] = mapped_column(String, default="medium")
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    primary_resource_id: Mapped[int | None] = mapped_column(ForeignKey("resources.id", ondelete="SET NULL"))
     category: Mapped[str] = mapped_column(String, default="")
     estimated_minutes: Mapped[int | None] = mapped_column(Integer)
     scheduled_date = mapped_column(Date, nullable=True, index=True)

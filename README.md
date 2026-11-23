@@ -29,6 +29,8 @@ The [host Caddy configuration](scripts/Caddyfile.lan) listens on a single IPv4 a
 
 Use quick capture to put an unscheduled task in the inbox. Open it to set a project, priority, planned time or deadline. Add a video or document in the library, then use its schedule action to create a linked task. The dashboard combines today's work, focus tasks, resources and deadline reminders. Choose a language at login or in workspace settings. Timezone, theme and model defaults are independent preferences.
 
+Paste a work link into a task or an assistant draft. Open the saved issue or document from Today or a board card. Home quick capture also accepts a title with links or a URL on its own. [Working from a task](docs/design/WORKING_FROM_TASKS.md)
+
 Drag a task card to another board column to change its status. On iPad, hold the card briefly before dragging. Swiping immediately scrolls the board. With a card focused, Alt + Left or Right moves it to the adjacent column. Moving to Done records completion. Moving it back reopens the task.
 
 Drag the dividers beside navigation, the assistant, the planner backlog or individual board columns. With a keyboard, focus a divider and use the arrow keys. Enter restores automatic sizing. You can also ask the assistant to “set the assistant sidebar width to 520 pixels” and apply the suggested width. This browser remembers widths for each account and fits them to the available space when the device rotates.

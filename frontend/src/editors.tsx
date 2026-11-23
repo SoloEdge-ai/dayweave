@@ -1,7 +1,9 @@
 import { TagPicker } from './tag-picker'
+import { ResumeEditor } from './task-resume'
+import { TaskLinkEditor } from './task-links'
 import { PlanDatePicker, type PlanDate } from './plan-date'
 import { useState, type FormEvent } from 'react'
-import { ExternalLink, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import {
   api,
   dateInZone,
@@ -10,13 +12,12 @@ import {
   priorityLabels,
   progressLabels,
   projectLabels,
-  safeUrl,
-  workspaceLink,
   statusLabels,
   taskTags,
   typeLabels,
   type Project,
   type Resource,
+  type PrimaryDestination,
 } from './api'
 import { ErrorBox, Field, Modal, useWorkspace, type EditorState } from './ui'
 import { localInput, toIso } from './datetime'
@@ -78,10 +79,20 @@ function TaskEditor({
     due_at: localInput(t.due_at, zone),
   })
   const [tags, setTags] = useState(taskTags(t))
+  const [inlineLinks, setInlineLinks] = useState(t.links ?? [])
+  const [invalidLink, setInvalidLink] = useState(false)
+  const [primary, setPrimary] = useState<PrimaryDestination>({
+    primary_resource_id: t.primary_resource_id ?? null, primary_link_url: t.primary_link_url ?? null,
+  })
   const [pinned, setPinned] = useState(t.pinned ?? false),
     [links, setLinks] = useState<number[]>(t.resource_ids ?? []),
     [allow, setAllow] = useState(false)
   const { busy, error, submit } = useSubmit(close)
+  function selectResources(ids: number[]) {
+    setLinks(ids)
+    if (primary.primary_resource_id != null && !ids.includes(primary.primary_resource_id))
+      setPrimary({ primary_resource_id: null, primary_link_url: null })
+  }
   const props = (key: keyof typeof values) => ({
     value: values[key] ?? '',
     onChange: (e: { target: { value: string } }) =>
@@ -112,6 +123,7 @@ function TaskEditor({
   }
   function save(e: FormEvent) {
     e.preventDefault()
+    if (invalidLink) return
     void submit(
       () => {
         const v = values
@@ -137,15 +149,18 @@ function TaskEditor({
             due_at: toIso(v.due_at, zone, t.due_at),
             pinned,
             resource_ids: links,
+            ...(inlineLinks.length ? { links: inlineLinks } : {}),
             allow_due_conflict: allow,
         }
-        if (!orig) return api('/tasks', 'POST', valuesToSave)
+        if (!orig) return api('/tasks', 'POST', { ...valuesToSave, ...primary })
         const patch = Object.fromEntries(
           Object.entries(valuesToSave).filter(([key, value]) => {
             if (key === 'allow_due_conflict') return value === true
             return JSON.stringify(orig[key as keyof typeof orig]) !== JSON.stringify(value)
           }),
         )
+        if (primary.primary_resource_id !== (orig.primary_resource_id ?? null) ||
+            primary.primary_link_url !== (orig.primary_link_url ?? null)) Object.assign(patch, primary)
         return api('/tasks/' + orig.id, 'PATCH', patch)
       },
       orig ? '任务已更新' : '任务已创建',
@@ -164,6 +179,8 @@ function TaskEditor({
               placeholder="想完成什么？"
             />
           </Field>
+          <TaskLinkEditor ids={links} links={inlineLinks} primary={primary} onPrimary={setPrimary}
+            onIds={selectResources} onLinks={setInlineLinks} onInvalid={setInvalidLink} />
           <Field label="状态">
             <select {...props('status')}>{opts(statusLabels)}</select>
           </Field>
@@ -243,7 +260,7 @@ function TaskEditor({
                           type="checkbox"
                           checked={links.includes(r.id)}
                           onChange={(e) =>
-                            setLinks(
+                            selectResources(
                               e.target.checked
                                 ? [...links, r.id]
                                 : links.filter((id) => id !== r.id),
@@ -258,23 +275,6 @@ function TaskEditor({
               )}
             </div>
           </details>
-          {orig && links.length > 0 && (
-            <div className="wide linked-list">
-              {resources
-                .filter((r) => links.includes(r.id))
-                .map((r) => {
-                  const url = r.file_url ? workspaceLink(r.file_url) : safeUrl(r.url)
-                  return (
-                    url && (
-                      <a href={url} target="_blank" rel="noreferrer" key={r.id}>
-                        <ExternalLink size={14} />
-                        {r.title}
-                      </a>
-                    )
-                  )
-                })}
-            </div>
-          )}
           {error && (
             <div className="wide">
               <ErrorBox message={error} />
@@ -330,7 +330,7 @@ function TaskEditor({
           <button type="button" className="secondary" onClick={close}>
             取消
           </button>
-          <button className="primary" disabled={busy}>
+          <button className="primary" disabled={busy || invalidLink}>
             {busy ? '正在保存…' : '保存任务'}
           </button>
         </footer>
@@ -677,6 +677,7 @@ export function Editors({
   close: () => void
 }) {
   if (!item) return null
+  if (item.kind === 'resume') return <ResumeEditor key={item.task.id} task={item.task} close={close} />
   if (item.kind === 'task') return <TaskEditor item={item} close={close} />
   if (item.kind === 'resource')
     return <ResourceEditor item={item} close={close} />

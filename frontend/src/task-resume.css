@@ -1,0 +1,21 @@
+.task-assist { display:flex; flex-wrap:wrap; align-items:center; gap:2px; }
+.task-assist button { color:var(--muted); }
+.task-assist button:hover { color:var(--accent); }
+.task-discuss { display:inline-flex; align-items:center; gap:6px; padding:5px 8px; border-radius:5px; font-size:12px; }
+.task-discuss:hover { background:var(--tint); }
+.resume-line { margin:4px 0 6px; display:flex; gap:4px 8px; flex-wrap:wrap; align-items:baseline; white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; color:var(--ink); }
+.resume-line span { color:var(--muted); font-size:11px; }
+.resume-plan { padding:0 12px 10px; }
+.resume-form { display:grid; gap:8px; }
+.resume-form small { color:var(--muted); }
+.resume-form textarea { padding:8px; border:1px solid var(--line); border-radius:5px; background:var(--sheet); color:var(--ink); resize:vertical; }
+.resume-form > .secondary { justify-self:start; }
+.board-card-actions { padding:0 9px 6px; background:var(--sheet); border-radius:0 0 5px 5px; }
+.board-column li:has(> .board-card-actions) { background:var(--sheet); border:1px solid var(--line); border-radius:5px; }
+.board-column li:has(> .board-card-actions) > .board-card { border:0; box-shadow:none; }
+.board-column li:has(> .board-card-actions):hover { border-color:var(--accent); }
+.task-chat-context { padding:9px 14px; display:grid; gap:4px; border-bottom:1px solid var(--line); overflow-wrap:anywhere; max-height:min(33dvh, 220px); overflow:auto; flex:none; }
+.task-chat-context small { color:var(--muted); }
+@media (pointer: coarse) {
+  .task-assist button, .resume-plan button, .resume-form > .secondary { min-height:44px; min-width:44px; }
+}

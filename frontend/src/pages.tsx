@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { TaskBoard } from './task-board'
+import { PlanResumeToday, ResumeLine, TaskAssist } from './task-resume'
+import { TaskDestinations } from './task-links'
 import { WeekStrip, monday } from './week-strip'
 import { i18n } from './i18n'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -21,7 +23,6 @@ import {
   FolderOpen,
   Inbox,
   ListChecks,
-  Paperclip,
   Pencil,
   Plus,
   Search,
@@ -191,6 +192,7 @@ export function TaskRow({
       >
         <span>{t.status === 'done' && <Check size={13} />}</span>
       </button>
+      <div className="task-row-content">
       <button
         className="row-main"
         onClick={() => edit({ kind: 'task', task: t })}
@@ -225,15 +227,13 @@ export function TaskRow({
               {dateLabel(due)}{t.due_at ? ' '+timeLabel(t.due_at,zone) : t.due_period ? ' '+periodLabels[t.due_period] : ''}截止
             </span>
           )}
-          {t.resource_ids?.length > 0 && (
-            <span>
-              <Paperclip size={12} />
-              {t.resource_ids.length}
-            </span>
-          )}
           {t.status !== 'todo' && <span>{statusLabels[t.status]}</span>}
         </span>
       </button>
+      <ResumeLine taskId={t.id} />
+      <TaskDestinations ids={t.resource_ids} primary={t} />
+      <TaskAssist task={t} />
+      </div>
       <span className={'priority ' + t.priority}>
         <i />
         {priorityLabels[t.priority] ?? t.priority}
@@ -264,7 +264,7 @@ function dayOrder(tasks: Task[], zone: string) {
 }
 export function HomePage() {
   const data = useApi<Dashboard>('/dashboard/today'),
-    { edit, settings } = useWorkspace(),
+    { edit, settings, resumes, resumeError } = useWorkspace(),
     nav = useNavigate()
   const week = useApi<Task[]>('/tasks?view=week')
   const overview = data.data,
@@ -273,6 +273,8 @@ export function HomePage() {
     tasks = dayOrder(overview?.tasks ?? [], zone),
     focus = overview?.focus ?? [],
     resources = overview?.resources ?? []
+  const resumeQueue = resumes.filter(({task}) => !task.scheduled_date && !task.planning_window &&
+    (task.status === 'todo' || task.status === 'in_progress')).slice(0, 3)
   const reminders = [
     ['overdue', '已逾期'],
     ['due_today', '今天到期'],
@@ -335,6 +337,13 @@ export function HomePage() {
               </Empty>
             )}
           </Section>
+          {resumeError ? <ErrorBox message={errorText(resumeError)} /> : resumeQueue.length > 0 &&
+            <Section icon={ListChecks} title="接着做">
+              <div className="rows">{resumeQueue.map(({task}) => <div key={task.id}>
+                <TaskRow t={task} />
+                <PlanResumeToday task={task} today={date} />
+              </div>)}</div>
+            </Section>}
           {focus.length > 0 && <section className="daily-focus">
             <h2><Flag size={16} />今日重点</h2>
             <div>{focus.slice(0, 3).map(task =>

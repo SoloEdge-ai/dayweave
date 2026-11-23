@@ -1,10 +1,11 @@
 from datetime import date, timezone
+import re
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
-    AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, StringConstraints,
+    AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, StringConstraints,
     field_validator, model_validator,
 )
 from .i18n import Language
@@ -27,6 +28,40 @@ class TagInput(Input):
     name: TagName
 
 
+def normalized_link(value: str) -> str:
+    link = HttpUrl(value.strip())
+    if link.username or link.password:
+        raise ValueError("resource.credentials_in_url")
+    return str(link)
+
+
+def validate_task_url(value: str) -> str:
+    text = value.strip()
+    if not text.lower().startswith(("http://", "https://")) or re.search(r"[\s\\]", text):
+        raise ValueError("validation.url")
+    return normalized_link(text)
+
+
+TaskUrl = Annotated[str, Field(min_length=1, max_length=5000), AfterValidator(validate_task_url)]
+
+
+class TaskLink(Input):
+    url: TaskUrl
+    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] | None = None
+
+    def resource_title(self) -> str:
+        if self.title:
+            return self.title
+        parts = urlsplit(self.url)
+        issue = re.search(r"/browse/([A-Z][A-Z0-9_]*-\d+)/?$", parts.path, re.IGNORECASE)
+        if issue:
+            return issue.group(1).upper()
+        return (parts.netloc + parts.path.rstrip("/"))[:500]
+
+
+TaskLinks = Annotated[list[TaskLink], Field(max_length=100)]
+
+
 class ScheduleFields(Input):
     scheduled_date: date | None = None
     scheduled_period: Literal["morning", "afternoon", "evening"] | None = None
@@ -42,6 +77,14 @@ class SchedulePatch(ScheduleFields):
 
 
 TaskStatus = Literal["todo", "in_progress", "done", "cancelled"]
+
+
+ResumeText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=600)]
+
+
+class ResumeNotePatch(Input):
+    text: ResumeText
+    expected_updated_at: str | None = Field(max_length=64)
 
 
 class StatusMove(Input):
@@ -63,6 +106,17 @@ class TaskInput(ScheduleFields):
     due_at: AwareDatetime | None = None
     pinned: bool = False
     resource_ids: IdList = Field(default_factory=list)
+    links: TaskLinks = Field(default_factory=list)
+    primary_resource_id: int | None = Field(None, gt=0)
+    primary_link_url: TaskUrl | None = None
+
+    @field_validator("links")
+    @classmethod
+    def unique_links(cls, values):
+        unique = {}
+        for link in values:
+            unique.setdefault(link.url, link)
+        return list(unique.values())
 
     @field_validator("planned_start_at", "planned_end_at", "due_at")
     @classmethod
@@ -71,6 +125,8 @@ class TaskInput(ScheduleFields):
 
     @model_validator(mode="after")
     def validate_precision(self):
+        if self.primary_resource_id is not None and self.primary_link_url is not None:
+            raise ValueError("task.primary_conflict")
         if "tags" not in self.model_fields_set and self.category.strip():
             self.tags = [self.category.strip()]
         self.category = self.tags[0] if self.tags else ""
@@ -118,12 +174,7 @@ class ResourceInput(Input):
     @field_validator("url")
     @classmethod
     def valid_link(cls, value):
-        if not value:
-            return None
-        link = HttpUrl(value.strip())
-        if link.username or link.password:
-            raise ValueError("resource.credentials_in_url")
-        return str(link)
+        return normalized_link(value) if value else None
 
     @model_validator(mode="after")
     def check_progress(self):

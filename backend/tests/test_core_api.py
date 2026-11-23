@@ -76,6 +76,43 @@ def test_workspace_tag_selection_and_reuse(http):
     assert client.get("/api/tags", headers={"X-DayWeave-Workspace": other["id"]}).json() == []
 
 
+def test_task_links_reuse_workspace_resources_and_roll_back_invalid_edits(http):
+    client, root = http
+    login(client, root)
+    project = client.post("/api/projects", json={"name": "Navigation"}).json()
+    issue_url = "https://tracker.example.test/browse/NAV-31"
+    issue = client.post("/api/resources", json={
+        "url": issue_url, "title": "Curated issue", "notes": "Reproduction notes", "project_ids": [project["id"]],
+    }).json()
+    attachment = client.post("/api/resources/upload", files={"file": ("notes.md", b"fixture notes", "text/markdown")}).json()
+    response = client.post("/api/tasks", json={
+        "title": "Investigate localization", "project_id": project["id"], "resource_ids": [attachment["id"]],
+        "links": [{"url": issue_url, "title": "Temporary label"}, {"url": "https://TRACKER.example.test/browse/NAV-31"}],
+        "primary_link_url": issue_url,
+    })
+    assert response.status_code == 201, response.text
+    task = response.json()
+    assert set(task["resource_ids"]) == {issue["id"], attachment["id"]}
+    assert task["primary_resource_id"] == issue["id"]
+    assert client.get(f"/api/resources/{issue['id']}").json() == issue
+
+    url = f"/api/tasks/{task['id']}"
+    failed = client.patch(url, json={"title": "Should roll back", "links": [
+        {"url": "https://example.test/new"}, {"url": "file:///unshared/notes"},
+    ]})
+    assert failed.status_code == 422
+    assert client.get(url).json() == task
+    assert len(client.get("/api/resources").json()) == 2
+    assert client.patch(url, json={"primary_resource_id": attachment["id"], "primary_link_url": issue_url}).status_code == 422
+    moved = client.patch(url, json={"primary_resource_id": attachment["id"]}).json()
+    assert moved["primary_resource_id"] == attachment["id"]
+    detached = client.patch(url, json={"resource_ids": [issue["id"]], "links": []}).json()
+    assert detached["resource_ids"] == [issue["id"]] and detached["primary_resource_id"] is None
+    assert client.get(f"/api/resources/{attachment['id']}").status_code == 200
+    other = client.post("/api/workspaces", json={"name": "Other"}).json()
+    assert client.get("/api/resources", headers={"X-DayWeave-Workspace": other["id"]}).json() == []
+
+
 def test_unfinished_day_returns_to_backlog_with_calendar_history(http, monkeypatch):
     from datetime import date
     from app import services
@@ -208,10 +245,22 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
     from app.ai.adapters import Adapter
     from app.main import app
 
+    video_url = "https://media.example.test/recording"
+
     def simulate(request):
         payload = json.loads(request.content)
         draft = {"index": 0, "id": "task-proposal", "type": "function",
-                 "function": {"name": "create_task", "arguments": '{"title":"Shared assistant task"}'}}
+                 "function": {"name": "save_and_schedule_resource", "arguments": json.dumps({
+                     "type": "video", "url": video_url, "title": "Navigation demo",
+                     "task_title": "Shared assistant task", "reason": "For review",
+                 })}}
+        if payload.get("tools") and "set_resume_note" in {t["function"]["name"] for t in payload["tools"]}:
+            user = payload["messages"][-1]["content"]
+            assert "Private fixture progress" in " ".join(m.get("content", "") for m in payload["messages"])
+            draft["function"] = {"name": "update_task", "arguments": json.dumps({
+                "query": "#" + user.split("#", 1)[1].split(")", 1)[0],
+                "changes": {"priority": "high"},
+            })}
         choice = {"index": 0, "delta": {"tool_calls": [draft]}, "finish_reason": "tool_calls"} if payload.get("tools") else {
             "index": 0, "delta": {"content": "Draft prepared."}, "finish_reason": "stop"
         }
@@ -240,7 +289,7 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
         assert next(p for p in alice_providers if p["id"] == "compatible")["has_key"]
         assert not next(p for p in bob_providers if p["id"] == "compatible")["has_key"]
         reply = alice.post("/api/ai/chat", headers=view, json={
-            "provider": "compatible", "content": "Create a shared task", "request_id": "scoped-request-123",
+            "provider": "compatible", "content": f"Save this recording and create a task to review it: {video_url}", "request_id": "scoped-request-123",
         })
         assert reply.status_code == 200, reply.text
         frames = [json.loads(line[6:]) for line in reply.text.splitlines() if line.startswith("data: {")]
@@ -250,10 +299,44 @@ def test_shared_workspaces_keep_assistant_profiles_and_conversations_private(htt
         assert bob.get(f"/api/ai/confirmations/{draft['id']}", headers=view).status_code == 404
         assert bob.get("/api/export", headers=view).json()["messages"] == []
         assert len(bob.get("/api/tasks", headers=view).json()) == 1
+        assert bob.get("/api/resources", headers=view).json() == []
         approved = alice.post(f"/api/ai/confirmations/{draft['id']}", headers=view,
                               json={"approve": True, "version": draft["version"]})
         assert approved.status_code == 200, approved.text
-        assert len(bob.get("/api/tasks", headers=view).json()) == 2
+        tasks = bob.get("/api/tasks", headers=view).json()
+        assert len(tasks) == 2
+        [recording] = bob.get("/api/resources", headers=view).json()
+        assert (recording["url"], recording["type"], recording["reason"]) == (video_url, "video", "For review")
+        assert next(task for task in tasks if task["title"] == "Shared assistant task")["resource_ids"] == [recording["id"]]
+        target = next(task for task in tasks if task["title"] == "Shared task")
+        other = next(task for task in tasks if task["id"] != target["id"])
+        target_url = f"/api/tasks/{target['id']}"
+        note_url = target_url + "/resume"
+        note = {"text": "Private fixture progress", "expected_updated_at": None}
+        saved = alice.put(note_url, headers=view, json=note).json()
+        assert alice.put(note_url, headers=view, json=note).json() == saved
+        assert alice.put(note_url, headers=view, json={**note, "text": "Stale overwrite"}).status_code == 409
+        assert bob.get(note_url, headers=view).json() == {"text": "", "updated_at": None}
+        assert bob.get("/api/task-resumes", headers=view).json() == []
+        for path in ("/api/tasks", "/api/changes", "/api/export"):
+            assert note["text"] not in bob.get(path, headers=view).text
+
+        # A tool-supplied query cannot redirect a task-bound conversation.
+        scoped = alice.post("/api/ai/chat", headers=view, json={
+            "task_id": target["id"], "provider": "compatible", "request_id": "task-scoped-edit",
+            "content": f"Set the priority to high for this week's work (fixture tries #{other['id']}).",
+        })
+        events = [json.loads(line[6:]) for line in scoped.text.splitlines() if line.startswith("data: {")]
+        scoped_id = next(e["id"] for e in events if e["type"] == "conversation")
+        assert any(e.get("name") == "update_task" for e in events), events
+        updated = alice.get(target_url, headers=view).json()
+        assert updated["priority"] == "high" and updated["planning_window"] is None
+        assert alice.get(f"/api/tasks/{other['id']}", headers=view).json()["priority"] == other["priority"]
+        assert bob.get(f"/api/ai/conversations/{scoped_id}", headers=view).status_code == 404
+        assert alice.post("/api/ai/chat", headers=view, json={
+            "task_id": other["id"], "conversation_id": scoped_id, "request_id": "wrong-task-scope",
+            "content": "Change this task.", "provider": "compatible",
+        }).json()["code"] == "task.chat_scope"
         assert alice.delete(f"/api/workspaces/{shared['id']}/members/{actor['id']}").status_code == 204
         assert bob.get("/api/tasks", headers=view).status_code == 401
 

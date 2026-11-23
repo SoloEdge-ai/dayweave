@@ -9,8 +9,8 @@ from pydantic import Field
 from app import services
 from app.models import Project
 from app.records import active, lock_for_write
-from app.schemas import ResourceInput, TaskInput, TagNames
-from app.time_rules import apply_time_rules, merge_schedule
+from app.schemas import IdList, ResourceInput, TaskInput, TagNames, TaskLinks, TaskUrl, normalized_link
+from app.time_rules import apply_time_rules
 
 from .locale import preference, translate
 from .models import ChatTurn, Message, PendingAction
@@ -24,6 +24,10 @@ class EditableTask(Params):
     description: str | None = Field(None, max_length=30000)
     category: str | None = Field(None, max_length=300)
     tags: TagNames | None = None
+    links: TaskLinks | None = None
+    resource_ids: IdList | None = None
+    primary_resource_id: int | None = Field(None, gt=0)
+    primary_link_url: TaskUrl | None = None
     project_id: int | None = Field(None, gt=0)
     priority: Literal["low", "medium", "high"] | None = None
     scheduled_date: str | None = None
@@ -53,34 +57,46 @@ def is_draft(row):
 
 
 def task_values(action):
-    if "draft_task" in action:
-        return action["draft_task"]
     args = action["args"]
-    if action["name"] == "create_task":
-        return {k: v for k, v in args.items() if k in EditableTask.model_fields}
-    values = {k: v for k, v in args.items() if k in EditableTask.model_fields}
-    values["title"] = args["task_title"]
-    if "task_description" in args:
-        values["description"] = args["task_description"]
-    if "task_project_id" in args:
-        values["project_id"] = args["task_project_id"]
+    stored = action.get("draft_task")
+    watch = action["name"] == "save_and_schedule_resource"
+    if stored is not None:
+        values = dict(stored)
+    else:
+        values = {k: v for k, v in args.items() if k in EditableTask.model_fields}
+        if watch:
+            values["title"] = args["task_title"]
+            if "task_description" in args:
+                values["description"] = args["task_description"]
+            if "task_project_id" in args:
+                values["project_id"] = args["task_project_id"]
+    values.setdefault("resource_ids", args.get("resource_ids") or [])
+    # Older proposals kept the source only in the tool arguments. An explicit empty
+    # list on an edited card means the user has removed it.
+    if watch and (stored is None or "links" not in stored):
+        source = {"url": normalized_link(args["url"]), "title": args["title"]}
+        values["links"] = [source, *(values.get("links") or [])]
     return values
 
 
-def resource_values(action):
-    return {k: v for k, v in action["args"].items() if k in ResourceInput.model_fields}
+def selected_source(action, links):
+    if action["name"] != "save_and_schedule_resource":
+        return None
+    args = action["args"]
+    url = normalized_link(args["url"])
+    for link in links:
+        if link["url"] == url:
+            data = {k: v for k, v in args.items() if k in ResourceInput.model_fields}
+            return {**data, "url": url, "title": link.get("title") or args["title"]}
+    return None
 
 
-def validate(db, action):
+def validate(db, action, *, explicit_primary=True):
     candidate = TaskInput.model_validate(task_values(action))
     if candidate.project_id:
         active(db, Project, candidate.project_id)
-    for resource_id in action["args"].get("resource_ids") or []:
-        services.get_resource(db, resource_id)
-    if action["name"] == "save_and_schedule_resource":
-        resource = ResourceInput.model_validate(resource_values(action))
-        for project_id in resource.project_ids:
-            active(db, Project, project_id)
+    resource_urls = {rid: services.get_resource(db, rid)["url"] for rid in candidate.resource_ids}
+    services.selected_primary(candidate, resource_urls, explicit=explicit_primary)
     conflict = False
     try:
         apply_time_rules(candidate, services.get_settings(db)["timezone"])
@@ -88,9 +104,13 @@ def validate(db, action):
         if exc.status_code != 409:
             raise
         conflict = True
-    action["draft_task"] = candidate.model_dump(
-        mode="json", include=set(EditableTask.model_fields)
-    )
+    values = candidate.model_dump(mode="json", include=set(EditableTask.model_fields))
+    source = selected_source(action, values["links"])
+    if source:
+        resource = ResourceInput.model_validate(source)
+        for project_id in resource.project_ids:
+            active(db, Project, project_id)
+    action["draft_task"] = values
     action["conflict"] = conflict
 
 
@@ -107,9 +127,11 @@ def event(row):
     for index, action in enumerate(row.actions):
         if action["name"] not in CREATES:
             continue
-        item = {"index": index, "task": action["draft_task"]}
-        if action["name"] == "save_and_schedule_resource":
-            item["resource"] = {k: action["args"][k] for k in ("title", "type", "url")}
+        task = task_values(action)
+        item = {"index": index, "task": task}
+        source = selected_source(action, task.get("links", []))
+        if source:
+            item["resource"] = {k: source[k] for k in ("title", "type", "url")}
         if row.status == "approved" and len(results) > index:
             receipt = results[index]
             item["task_id"] = receipt.get("task", receipt)["id"]
@@ -211,7 +233,7 @@ def edit(db, pending_id, changes):
         delta = edit.task.model_dump(exclude_unset=True)
         if not delta:
             raise HTTPException(422, "请至少修改一项任务属性。")
-        current = action["draft_task"]
+        current = task_values(action)
         if "category" in delta and "tags" not in delta:
             name = (delta["category"] or "").strip()
             delta["tags"] = ([name] if name else []) + current.get("tags", [])[1:]
@@ -227,8 +249,8 @@ def edit(db, pending_id, changes):
             delta["due_at"] = None
         if delta.get("due_at") and "due_date" not in delta:
             delta["due_date"] = None
-        action["draft_task"] = merge_schedule(current,delta)
-        validate(db, action)
+        action["draft_task"] = services.merge_task_fields(current, delta)
+        validate(db, action, explicit_primary=bool(services.PRIMARY_FIELDS.intersection(delta)))
     row.actions = actions
     row.summary = summary(actions, preference(db))
     row.version += 1
@@ -243,21 +265,16 @@ def commit_approved(db, action, conversation_id, allow_conflict):
     meta = {"source": "ai", "conversation_id": conversation_id}
     values = {
         **action["draft_task"],
-        "resource_ids": action["args"].get("resource_ids", []),
         "allow_due_conflict": allow_conflict,
     }
     if action["name"] == "create_task":
         return brief(services.create_task(db, values, **meta))
-    resource_values_valid = ResourceInput.model_validate(
-        resource_values(action)
-    ).model_dump(mode="json")
-    url = resource_values_valid["url"]
-    resource = next(
-        (r for r in services.list_resources(db) if r.get("url") == url), None
-    )
-    resource = resource or services.create_resource(db, resource_values_valid, **meta)
-    values["resource_ids"] = [resource["id"]]
-    return {
-        "resource": brief(resource),
-        "task": brief(services.create_task(db, values, **meta)),
-    }
+    result = {}
+    source = selected_source(action, values["links"])
+    if source:
+        resource = services.create_resource(db, source, **meta)
+        values["resource_ids"] = [*values["resource_ids"], resource["id"]]
+        values["links"] = [link for link in values["links"] if link["url"] != source["url"]]
+        result["resource"] = brief(resource)
+    result["task"] = brief(services.create_task(db, values, **meta))
+    return result

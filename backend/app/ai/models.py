@@ -30,6 +30,7 @@ class Conversation(AccountPrivate, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str]
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"))
     created_at: Mapped[str] = mapped_column(default=utcnow)
 
 
