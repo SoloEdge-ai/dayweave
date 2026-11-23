@@ -107,9 +107,14 @@ def create_task(db, data, *, source="manual", conversation_id=None):
     return _write_task(db, Task(), data, source, conversation_id)
 
 
-def update_task(db, id, data, *, source="manual", conversation_id=None):
+def update_task(db, id, data, *, source="manual", conversation_id=None, expected_status=None):
     lock_for_write(db)
-    return _write_task(db, active(db, Task, id), data, source, conversation_id)
+    task = active(db, Task, id)
+    if expected_status is not None and task.status != expected_status:
+        if task.status == data["status"]:
+            return snapshot(task)
+        raise DomainError(409, "task.stale_status")
+    return _write_task(db, task, data, source, conversation_id)
 
 
 def schedule_task(db, id, patch):

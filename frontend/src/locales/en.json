@@ -488,5 +488,10 @@
   "＋ 新建标签": "＋ New tag",
   "新标签名称": "New tag name",
   "取消新建标签": "Cancel new tag",
-  "移除标签": "Remove tag"
+  "移除标签": "Remove tag",
+  "正在移动任务": "Moving task",
+  "目标状态": "Target status",
+  "已取消移动": "Move cancelled",
+  "任务状态已更新": "Task status updated",
+  "按住卡片拖动，或按 Alt 加左右方向键移到相邻列。": "Hold and drag a card, or press Alt with Left or Right Arrow to move it to an adjacent column."
 }

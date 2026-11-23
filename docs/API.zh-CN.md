@@ -41,6 +41,7 @@ sequenceDiagram
 | `GET /api/dashboard/today` | 返回本地日期、重点任务、当天任务、关联资料和提醒分组 |
 | `GET, POST /api/tasks` | 筛选任务或创建任务 |
 | `GET, PATCH, DELETE /api/tasks/{id}` | 读取、编辑或软删除任务 |
+| `PATCH /api/tasks/{id}/status` | 传入目标 `status` 和拖动前的 `expected_status`，返回更新后的任务。重复提交同一目标成功，遇到状态冲突返回 409。 |
 | `PATCH /api/tasks/{id}/schedule` | 通过任务的 `expected_updated_at` 更新计划，返回 `task` 和变更的 `change_id` |
 | `GET, POST /api/projects` | 列出项目或创建项目 |
 | `GET, PATCH, DELETE /api/projects/{id}` | 读取带关联任务与资料的项目详情、更新或删除项目 |
